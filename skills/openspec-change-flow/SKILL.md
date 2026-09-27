@@ -1,17 +1,19 @@
 ---
 name: openspec-change-flow
-description: The change flow for an OpenSpec repository — one human gate inside it, at merge, bracketed by an explicit start and stop. Use when running an OpenSpec change end to end — opening the flow, proposing, applying, opening a PR, watching CI, archiving, merging, closing or abandoning — and whenever deciding whether a step needs the user's approval or whether CI green is the trigger.
+description: The change flow for an OpenSpec repository — one human gate inside it, at merge, bracketed by an explicit start and stop. Use when running an OpenSpec change end to end — opening or resuming the flow, proposing, applying, opening a PR, watching CI, archiving, merging, stopping, suspending or abandoning — and whenever deciding whether a step needs the user's approval or whether CI green is the trigger.
 version: 0.2.0
 ---
 
 # The change flow
 
 ```
-/start-change <name>            <- the flow opens here, explicitly
+/start-change <name>            <- opens the flow, or resumes a suspended one
   opsx explore -> propose -> apply -> open PR -> watch CI
     on green: archive, then merge on explicit request
     on red:   fix, push, watch again
-/stop-change <name> [--abandon] <- the flow closes here, explicitly
+/stop-change <name>             <- stops the flow: closed if it reached its end,
+                                   suspended (with a resume point) if it did not
+/stop-change <name> --abandon   <- destroys the change and its code
 ```
 
 **Merge is the only human gate *inside* the flow.** Between `/start-change` and
@@ -71,16 +73,24 @@ first and archived afterwards**, in a second pull request needing a second merge
 exactly the extra gate the one-gate design exists to remove. The order was never
 established as binding, because the flow was never explicitly opened.
 
-## Opening the flow
+## Opening or resuming the flow
 
-`/start-change <name>` — see the command for the full procedure. It answers
-"does this deserve a change?" out loud, then refuses to open on a dirty tree, on
-a base that has moved, on a name already in `changes/archive/`, or alongside a
-second active change. Each refusal exists because the step that comes later
-would otherwise measure the wrong thing; the command says which step, for each.
+`/start-change <name>` — see the command for the full procedure. Two ways in,
+decided by what is on disk rather than by a flag:
 
-A name already under `openspec/changes/` and not yet archived is a **resume**,
-not a refusal.
+- **Fresh** — nothing under `openspec/changes/<name>/`. "Does this deserve a
+  change?" is answered out loud first.
+- **Resume** — the change directory is there, with or without a `STOPPED.md`
+  marker. The deserve-a-change question is **not** re-asked: it was answered when
+  the change was opened, and asking again on every interruption is the
+  twice-per-change flow this design rejected. Instead the recorded resume point
+  is read, its head SHA is verified to still resolve, and the recorded next step
+  is restated. A resume point naming a commit no ref reaches is a refusal.
+
+Either way it refuses a dirty tree, a base that has moved, a name already in
+`changes/archive/`, or a *different* second active change. Each refusal exists
+because a later step would otherwise measure the wrong thing; the command says
+which step, for each. A resume consumes its marker in the commit that resumes.
 
 From the open until the stop, the order below binds. It is not advice, and the
 archive is not optional afterwards.
@@ -129,11 +139,31 @@ including after the archive commit, which is a new head. If asked to merge while
 checks are still running, say so and hold rather than merging an unverified head;
 the instruction is about intent, not timing.
 
-## Closing the flow
+## Stopping the flow
 
-`/stop-change <name>` closes a change that reached its end, and **refuses while
-the change is still unarchived** — that refusal is the inversion above, caught by
-construction.
+`/stop-change <name>` **just stops**. It does not judge whether the change is
+finished and never archives, merges or implements anything to make it look
+finished. Two outcomes, decided by the state it finds:
+
+- **Closed** — archived and merged. Nothing to resume, no marker written.
+- **Suspended** — anything else. The resume point is written to
+  `openspec/changes/<name>/STOPPED.md` (reason, head SHA, branch, PR, next step),
+  committed and pushed, and `/start-change <name>` picks it up later.
+
+A marker rather than an inference, for the reason the checker uses markers at
+all: intent is declared, never guessed. "A change directory with no session open"
+reads identically for a change stopped deliberately, one being worked on another
+branch, and one nobody has touched in a month.
+
+The one thing a stop refuses is a **clean close over the inversion**: a merged
+pull request whose delta is still unapplied is reported as the defect it is, with
+"archive now" as the remedy, rather than recorded as tidy. An unarchived change
+whose PR is still open is not refused — that is ordinary unfinished work, and
+stopping is allowed to leave work unfinished.
+
+Anything that exists only on this machine is pushed before the stop is recorded.
+A resume point on one laptop is the `rescue/full-spike-work` failure in slow
+motion.
 
 `/stop-change <name> --abandon` **destroys** a change: the proposal, the
 implementation code, the branch and the pull request all leave the working

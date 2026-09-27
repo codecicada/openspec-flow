@@ -8,7 +8,11 @@ source of truth is the `openspec-change-flow` skill; this page draws it.
 ```mermaid
 flowchart TD
   start(["Idea"]) --> openCmd["/start-change name"]
-  openCmd --> deserve{"Does this deserve<br/>a change?"}
+  suspended(["Suspended change<br/>STOPPED.md on disk"]) --> openCmd
+  openCmd --> way{"fresh, or<br/>resuming?"}
+  way -- resume --> resumept["read STOPPED.md,<br/>verify the head resolves,<br/>restate the next step"]
+  resumept --> checks
+  way -- fresh --> deserve{"Does this deserve<br/>a change?"}
   deserve -- no --> drop(["No change"])
   deserve -- yes --> checks{"clean tree? base current?<br/>name free? no other change open?"}
   checks -- no --> refuse(["Refused: report it,<br/>the flow does not open"])
@@ -32,8 +36,11 @@ flowchart TD
   gate --> merged(["Merged"])
   merged --> closeCmd["/stop-change name"]
   closeCmd --> closed(["Flow closed"])
+  opened -. "stopped at any point" .-> stopCmd["/stop-change name"]
+  stopCmd --> suspend(["Suspended:<br/>STOPPED.md written,<br/>pushed, resumable"])
+  suspend -. later .-> suspended
   opened -. "given up at any point" .-> abandonCmd["/stop-change name --abandon"]
-  abandonCmd --> closed
+  abandonCmd --> destroyed(["Destroyed"])
 
   classDef human fill:#fde68a,stroke:#b45309,color:#1f2937;
   classDef question fill:#e0e7ff,stroke:#4338ca,color:#1f2937;
@@ -43,9 +50,11 @@ flowchart TD
   class checks question;
   class green1 question;
   class green2 question;
+  class way question;
   class opened bracket;
   class openCmd bracket;
   class closeCmd bracket;
+  class stopCmd bracket;
   class abandonCmd bracket;
 ```
 
@@ -62,6 +71,13 @@ Nothing between these two points stops to ask.
 work; they say whether work is under way at all. Merge is the only gate *inside*
 the brackets, and the count of stops per change in flight is unchanged from the
 one-gate flow: one.
+
+They also nest in time. A stop does not have to mean "finished": it can
+**suspend**, recording the resume point in `openspec/changes/<name>/STOPPED.md`,
+and the next `/start-change` consumes that marker and picks the work up. One
+change can therefore be bracketed several times without ever asking "does this
+deserve a change?" more than once — that question belongs to the open, not to
+every interruption.
 
 ## Why one gate
 
@@ -108,6 +124,9 @@ extra gate this design exists to remove. The documented order was never
 established as binding, because the flow was never explicitly opened.
 
 ## Opening the flow
+
+(Resuming a change a stop suspended is the same command; it is covered
+[below](#resuming-a-stopped-change).)
 
 `/start-change <name>` refuses without a name. Nothing is inferred: a flow that
 can open itself is the state the bracket exists to end.
@@ -240,14 +259,73 @@ head SHA again — the archive commit is a new head. If the request comes while
 checks are still running, say so and hold. The request is about intent, not
 timing.
 
-## Closing the flow
+## Stopping the flow
 
-`/stop-change <name>` closes a change that reached its end, and **refuses while
-the change is still unarchived** — the directory is still under
-`openspec/changes/` rather than `openspec/changes/archive/`. That refusal is the
-merged-before-archived inversion, caught by construction rather than by someone
-remembering the order. It also holds while commits are unpushed or the pull
-request is still open, and it never merges anything to satisfy itself.
+`/stop-change <name>` **just stops**. It does not judge whether the change is
+finished, and it never archives, merges or implements anything to make it look
+finished — a stop reports the state it finds. Two outcomes, decided by that
+state:
+
+```mermaid
+flowchart TD
+  s1["Read the state:<br/>archived? merged? unpushed? PR?"] --> s2["Push anything that<br/>exists only here"]
+  s2 --> s3{"merged into the base<br/>AND delta unapplied?"}
+  s3 -- yes --> inv(["Refuse a clean close:<br/>report the inversion,<br/>archive now"])
+  s3 -- no --> s4{"archived and merged?"}
+  s4 -- yes --> done(["Closed: nothing to resume,<br/>no marker written"])
+  s4 -- no --> susp["Write STOPPED.md:<br/>reason, head SHA, branch,<br/>PR, next step"]
+  susp --> push(["Suspended: committed,<br/>pushed, resumable"])
+
+  classDef question fill:#e0e7ff,stroke:#4338ca,color:#1f2937;
+  class s3 question;
+  class s4 question;
+```
+
+**What it refuses is narrow, and on purpose.** An unarchived change whose pull
+request is still open is *not* refused: that is ordinary unfinished work, and
+stopping is allowed to leave work unfinished. The refusal is a clean close over
+the **inversion** — a merged pull request whose delta is still unapplied, which
+is live code the specification still calls a proposal. That state gets reported
+as the defect it is, with "archive now, in its own pull request" as the remedy.
+
+It is the one refusal here with a receipt. In the session that produced this
+command, a change was merged first and archived afterwards, in a second pull
+request needing a second merge, inverting step 7 of `/archive-on-green` and
+costing exactly the extra gate the one-gate design exists to remove.
+
+**Why a marker rather than an inference.** `STOPPED.md` is
+[principle 4](design.md#4-declare-intent-never-infer-it) applied to the flow
+instead of to a spec. "A change directory with no session open" reads identically
+for a change stopped deliberately, one being worked on another branch, and one
+nobody has touched in a month. The marker distinguishes them, travels with the
+branch, shows up in the pull request, and names the step to resume at.
+
+**Why the push comes first.** A resume point that exists on one machine is the
+`rescue/full-spike-work` failure in slow motion: the flow stops, the laptop is
+closed, and the work can only be picked up where it was left.
+
+## Resuming a stopped change
+
+`/start-change <name>` is also the resume, decided by what is on disk rather than
+by a flag: a change directory under `openspec/changes/<name>/` means resume, its
+absence means fresh.
+
+- **"Does this deserve a change?" is not re-asked.** It was answered at the open.
+  Re-asking it turns every interruption into a second gate, which is the
+  twice-per-change flow this design rejected.
+- **The recorded head must still resolve** (`git cat-file -e <SHA>^{commit}`). A
+  marker naming a commit no ref reaches means the branch was deleted or the work
+  never left another machine; resuming on top of that silently reopens the flow
+  against a different state than the one that stopped. That is a refusal, and it
+  reports where the SHA was last seen.
+- **The marker is consumed by the resume that acts on it**, in the commit that
+  resumes. A `STOPPED.md` left on a branch that is moving again says the opposite
+  of the truth.
+- **The open-time checks still apply** — clean tree, current base, no *other*
+  change open. The second-change search excludes the resumed change's own name,
+  which is the one place the same command means something different on the two
+  ways in. A missing `STOPPED.md` with a change directory present is an
+  interruption rather than a stop: say so, derive the state, and carry on.
 
 ## Abandoning a change
 
@@ -319,23 +397,28 @@ something different in the refusing state than in the adjacent permitting one.
 
 `scripts/gates/refusal-cases.sh` (`npm run test:gates`, and a CI job) builds each
 refusing state in a throwaway repository and reports both directions of every
-boundary — 19 observations over git and the filesystem alone, with no network, no
+boundary — 26 observations over git and the filesystem alone, with no network, no
 `gh` and no `openspec`. It covers the dirty tree, the moved base, the reused name
-(and the resume it must be told apart from), the second open change, the
-unarchived close, loose work at abandon, a tag that exists only locally, a tag
-verified on the remote, and work already merged.
+(and the resume it must be told apart from), the second open change, the resume
+that must not count itself, the suspend and its marker, a recorded head that no
+longer resolves, the marker's consumption, the inversion, loose work at abandon,
+a tag that exists only locally, a tag verified on the remote, and work already
+merged.
 
 `--abandon` also gets one observation that is not a refusal, because its design
 is a claim about what survives destruction: the harness deletes both branches and
 then restores the work from the tag **in a clone that never had the branch**.
 
-Watched failing before being trusted, three mutations:
+Watched failing before being trusted, six mutations:
 
 | mutation | reddens |
 |---|---|
 | name search narrowed to `-maxdepth 1` | the two observations that read it, and nothing else |
 | the abandon pin checked with `git tag -l` instead of `git ls-remote` | the local-only-tag refusal |
 | the tag push skipped while the destroy still runs | the pin check **and** the recovery — `rescue/full-spike-work` reproduced on demand |
+| the resume marker stubbed to always be present | the "no marker before a stop" and "marker consumed by the resume" observations |
+| the recorded head stubbed to always resolve | the unreachable-resume-point refusal |
+| the second-change search no longer excluding the resumed name | the observation that a resume does not count itself |
 
 The third mutation also found a defect in the harness itself: the recovery
 checkout sat above its `if`, so under `set -e` a missing tag killed the run
@@ -355,6 +438,7 @@ sufficient.
 stateDiagram-v2
   [*] --> Open: /start-change
   Open --> Proposed: propose
+  Suspended --> Open: /start-change (resume)
   Proposed --> Applied: apply
   Applied --> InReview: open PR
   InReview --> InReview: red, fix, push
@@ -362,9 +446,13 @@ stateDiagram-v2
   Archived --> Archived: red, fix, push
   Archived --> Merged: verified green AND explicit request
   Merged --> Closed: /stop-change
+  Open --> Suspended: /stop-change
+  Proposed --> Suspended: /stop-change
+  InReview --> Suspended: /stop-change
   Open --> Destroyed: /stop-change --abandon
   Proposed --> Destroyed: /stop-change --abandon
   InReview --> Destroyed: /stop-change --abandon
+  Suspended --> Destroyed: /stop-change --abandon
   Closed --> [*]
   Destroyed --> [*]
 
@@ -375,6 +463,11 @@ stateDiagram-v2
   note right of Archived
     delta applied to openspec/specs/
     change moved to changes/archive/
+  end note
+  note right of Suspended
+    change directory kept
+    STOPPED.md records reason,
+    head SHA, branch, PR, next step
   end note
   note right of Destroyed
     branch, code, proposal and PR gone

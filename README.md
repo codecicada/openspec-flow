@@ -24,13 +24,16 @@ built — with diagrams — are in [`docs/`](docs/README.md).
 
 **Commands**:
 
-- `/start-change` — open the flow: does this deserve a change, is the tree clean, is the base current, is the name free
+- `/start-change` — open the flow, or resume one a stop suspended: does this deserve a change, is the tree clean, is the base current, is the name free
 - `/archive-on-green` — pin the head SHA, confirm each check by name, archive, verify the apply
 - `/verify-green` — is this PR actually green, against its current head?
-- `/stop-change` — close a change that reached its end, or `--abandon` one: destroy it, code and all, after pinning the commits to a verified remote tag
+- `/stop-change` — stop the flow: closed if the change reached its end, suspended with a recorded resume point if it did not; `--abandon` destroys it, code and all, after pinning the commits to a verified remote tag
 
-`/start-change` and `/stop-change` bracket the flow; merge stays the only gate
-*inside* it. Why that is not a contradiction of "one gate" is argued in the
+`/start-change` and `/stop-change` bracket the flow, and the brackets nest in
+time rather than only once per change: a stop suspends, writing the resume point
+to `openspec/changes/<name>/STOPPED.md`, and the next `/start-change` consumes it
+and picks the work up where it was left. Merge stays the only gate *inside* the
+brackets. Why that is not a contradiction of "one gate" is argued in the
 `openspec-change-flow` skill — the metric was never the number of stops but
 whether a decision lives at each one, and "does this deserve a change?" was the
 decision the old flow left ungated.
@@ -155,7 +158,7 @@ test reports three failures.
 `scripts/gates/refusal-cases.sh` does the same job for the two gates, which are
 prose and so cannot be run. It builds each refusing state in a throwaway
 repository and checks that the detection command the command file names says
-something **different** there than in the adjacent permitting state — 19
+something **different** there than in the adjacent permitting state — 26
 observations, both directions of every boundary. A refusal whose condition no
 command can observe is a sentence, not a gate.
 
@@ -164,15 +167,16 @@ deletes both branches and then restores the work from the verified tag **in a
 clone that never had it**. Claiming "recoverable" without recovering it once is
 the kind of green this repository refuses everywhere else.
 
-Watched failing too — three mutations, each reddening exactly what reads it:
-narrowing the name search to `-maxdepth 1` takes the two observations that use
-it; checking the abandon pin with a local `git tag -l` instead of `git ls-remote`
-takes the local-only-tag refusal; and skipping the tag push while the destroy
-runs anyway takes both the pin check **and** the recovery, which is the
-`rescue/full-spike-work` failure reproduced on demand. What the harness does
-**not** cover is printed by the run itself — the "does this deserve a change?"
-judgement, the pull-request states, reverting code that reached the base, and
-whether an agent obeys a refusal it can see.
+Watched failing too — six mutations, each reddening exactly what reads it and
+nothing else: the name search narrowed to `-maxdepth 1`; the abandon pin checked
+with a local `git tag -l` instead of `git ls-remote`; the tag push skipped while
+the destroy runs anyway (which takes the pin check **and** the recovery — the
+`rescue/full-spike-work` failure reproduced on demand); the resume marker stubbed
+to always be present; the recorded head stubbed to always resolve; and the
+second-change search stopped excluding the resumed change's own name. What the
+harness does **not** cover is printed by the run itself — the "does this deserve
+a change?" judgement, the pull-request states, reverting code that reached the
+base, and whether an agent obeys a refusal it can see.
 
 ## Licence
 

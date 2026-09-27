@@ -113,8 +113,11 @@ detect_dirty() { git -C "$1" status --porcelain; }
 detect_behind() { git -C "$1" rev-list --count "HEAD..origin/$BASE"; }
 detect_name() { (cd "$1" && find openspec/changes -maxdepth 2 -type d -name "*$2*"); }
 detect_open() { (cd "$1" && find openspec/changes -mindepth 1 -maxdepth 1 -type d ! -name archive); }
+detect_others() { (cd "$1" && find openspec/changes -mindepth 1 -maxdepth 1 -type d ! -name archive ! -name "$2"); }
 detect_merged() { git -C "$1" merge-base --is-ancestor HEAD "origin/$BASE"; }
 detect_pin() { git -C "$1" ls-remote --tags origin "refs/tags/abandoned/$2"; }
+detect_marker() { [ -f "$1/openspec/changes/$2/STOPPED.md" ] && cat "$1/openspec/changes/$2/STOPPED.md"; }
+detect_reachable() { git -C "$1" cat-file -e "$2^{commit}" 2>/dev/null; }
 
 printf '\n# /start-change\n\n'
 
@@ -196,6 +199,16 @@ else
   observe fail 'start should refuse a second change, but no active change folder was found'
 fi
 
+# A resume must not refuse itself. The change being resumed is an active change
+# folder, so the "is another change open?" search has to exclude its own name —
+# the one place where the same command means something different on the two
+# ways in.
+if [ -z "$(detect_others "$R" '2026-01-04-already-open')" ]; then
+  observe ok 'resume does not count itself as the second open change'
+else
+  observe fail "resuming a change should exclude its own name; got: $(detect_others "$R" '2026-01-04-already-open')"
+fi
+
 rm -rf "$R/openspec/changes/2026-01-04-already-open"
 if [ -z "$(detect_open "$R")" ]; then
   observe ok 'start permits the first change: with none active the search prints nothing'
@@ -205,22 +218,95 @@ fi
 
 printf '\n# /stop-change\n\n'
 
-# --- 5. closing a change that was never archived ----------------------------
+# --- 5. stopping: suspend, close, and the one state that is a defect --------
 #
-# This is the inversion that produced the command: merged first, archived after.
+# A stop just stops, so an unarchived change with an open PR is NOT refused —
+# that is ordinary unfinished work. What is refused is a clean close over the
+# inversion that produced this command: merged first, archived after.
 
-R=$(new_repo unarchived)
+R=$(new_repo stopping)
 propose "$R" '2026-01-05-widget-limits'
-if [ -n "$(detect_open "$R")" ]; then
-  observe ok 'stop refuses a change still sitting in openspec/changes: archive never ran'
+git -C "$R" checkout -q -b feat/widget-limits
+printf 'limits\n' >>"$R/src/app.txt"
+git -C "$R" add -A && git -C "$R" commit -qm 'feat: widget limits'
+
+# Unmerged and unarchived: suspend, do not refuse.
+if ! detect_merged "$R" && [ -n "$(detect_open "$R")" ]; then
+  observe ok 'stop suspends unfinished work rather than refusing it: unmerged and unarchived'
 else
-  observe fail 'stop should refuse an unarchived change, but no active change folder was found'
+  observe fail 'an unmerged, unarchived change should be suspendable'
+fi
+
+# The marker is what a resume reads, so its absence and its presence have to be
+# distinguishable before either side of the resume can be trusted.
+if [ -z "$(detect_marker "$R" '2026-01-05-widget-limits')" ]; then
+  observe ok 'start sees no resume point before a stop has written one'
+else
+  observe fail 'no STOPPED.md should exist before the stop runs'
+fi
+
+HEAD_SHA=$(git -C "$R" rev-parse HEAD)
+cat >"$R/openspec/changes/2026-01-05-widget-limits/STOPPED.md" <<EOF
+# Stopped
+
+- **stopped**: 2026-01-05
+- **reason**: parked for review capacity
+- **head**: $HEAD_SHA
+- **branch**: feat/widget-limits
+- **pr**: none
+- **next step**: open a PR and watch CI
+EOF
+git -C "$R" add -A && git -C "$R" commit -qm 'chore(openspec): stop 2026-01-05-widget-limits'
+if detect_marker "$R" '2026-01-05-widget-limits' | grep -q '^- \*\*next step\*\*:'; then
+  observe ok 'the suspended change carries a resume point naming the next step'
+else
+  observe fail 'STOPPED.md should record the next step for the resume to restate'
+fi
+
+# Resume: the recorded head must still resolve. A marker pointing at a commit no
+# ref reaches means the work was deleted or never left another machine, and
+# reopening on top of it would silently resume a different state.
+if detect_reachable "$R" "$HEAD_SHA"; then
+  observe ok 'resume permits a recorded head that still resolves'
+else
+  observe fail 'the recorded head should resolve in the repository that wrote it'
+fi
+
+if ! detect_reachable "$R" '0000000000000000000000000000000000000000'; then
+  observe ok 'resume refuses a recorded head no ref reaches: the resume point is gone'
+else
+  observe fail 'an unreachable SHA must not read as resolvable'
+fi
+
+# The marker is consumed by the resume. Left behind on a branch that is moving
+# again it says the opposite of the truth.
+git -C "$R" rm -q -- 'openspec/changes/2026-01-05-widget-limits/STOPPED.md'
+git -C "$R" commit -qm 'chore(openspec): resume 2026-01-05-widget-limits'
+if [ -z "$(detect_marker "$R" '2026-01-05-widget-limits')" ] && [ -n "$(detect_open "$R")" ]; then
+  observe ok 'the resume consumes the marker and leaves the change itself in place'
+else
+  observe fail 'after resuming, STOPPED.md should be gone and the change directory should remain'
+fi
+
+# The defect: merged into the base while the delta is still unapplied.
+git -C "$R" push -q -u origin feat/widget-limits 2>/dev/null
+ROOT=$(dirname "$R")
+git clone -q "$ROOT/origin.git" "$ROOT/merger"
+git -C "$ROOT/merger" config user.email 'merger@example.invalid'
+git -C "$ROOT/merger" config user.name 'Merge Button'
+git -C "$ROOT/merger" merge -q --no-ff -m 'Merge pull request #1' origin/feat/widget-limits
+git -C "$ROOT/merger" push -q origin "$BASE" 2>/dev/null
+git -C "$R" fetch -q origin
+if detect_merged "$R" && [ -n "$(detect_open "$R")" ]; then
+  observe ok 'stop refuses a clean close over the inversion: merged, and the delta still unapplied'
+else
+  observe fail 'merged-with-unapplied-delta should be detectable as the inversion'
 fi
 
 rm -rf "$R/openspec/changes/2026-01-05-widget-limits"
 archived "$R" '2026-01-05-widget-limits'
 if [ -z "$(detect_open "$R")" ] && [ -n "$(detect_name "$R" '2026-01-05-widget-limits')" ]; then
-  observe ok 'stop permits the same change once it has moved under changes/archive/'
+  observe ok 'stop closes for good once the change is merged and under changes/archive/'
 else
   observe fail 'after archiving, the change should be found under changes/archive/ and nowhere else'
 fi

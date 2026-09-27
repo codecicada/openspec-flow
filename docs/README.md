@@ -8,7 +8,8 @@ repository two things:
    with exactly **one human gate inside it, at merge**, bracketed by an explicit
    `/start-change` and `/stop-change`. Between the brackets nothing stops to ask
    except merge, and CI green against the current head is what triggers the
-   archive.
+   archive. A stop can suspend rather than close, leaving a resume point the next
+   `/start-change` picks up.
 2. **Drift checks** — a small CLI (`openspec-check-specs`) that fails when a
    specification is about to lose something silently, or when a capability that
    claims to list something from the code no longer matches the code.
@@ -85,10 +86,10 @@ Three layers, each with one job:
 skills/openspec-change-flow/        the flow, its one gate, its two brackets
 skills/openspec-spec-drift/         MODIFIED deltas, markers, inventories
 skills/openspec-evidence/           watch a check fail before trusting it
-commands/start-change.md            open the flow: deserve, clean, current, free
+commands/start-change.md            open the flow, or resume a suspended change
 commands/verify-green.md            is this PR green against its head?
 commands/archive-on-green.md        pin, confirm, archive, verify
-commands/stop-change.md             close it, or abandon it without losing work
+commands/stop-change.md             stop it: close, suspend, or abandon and destroy
 scripts/check-specs/index.mjs       CLI entry point: all disk I/O, one subprocess
 scripts/check-specs/lib/*.mjs       pure checks over text, unit-tested
 scripts/check-specs/smoke-bin.sh    the bin, packed and installed as a consumer gets it
