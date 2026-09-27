@@ -104,11 +104,12 @@ jobs:
     # in a clone that never had it. "Recoverable" is a claim, and an unexercised
     # claim is the empty green this repository refuses everywhere else.
     #
-    # Watched failing before being trusted: narrowing the name search to
-    # `-maxdepth 1` reddens exactly the two observations that read it; checking
-    # the abandon pin with a local `git tag -l` instead of `git ls-remote`
-    # reddens the local-only-tag refusal; and skipping the tag push while the
-    # destroy runs anyway reddens both the pin check and the recovery.
+    # Watched failing before being trusted, six mutations, each reddening only
+    # what reads it: the name search narrowed to `-maxdepth 1`; the abandon pin
+    # checked with a local `git tag -l` instead of `git ls-remote`; the tag push
+    # skipped while the destroy runs anyway (pin check AND recovery); the resume
+    # marker stubbed present; the recorded head stubbed resolvable; and the
+    # second-change search no longer excluding the resumed change's own name.
     #
     # git only — no network beyond the checkout, no `gh`, no `openspec`.
     steps:

@@ -1,58 +1,106 @@
 ---
 name: stop-change
-description: Close the OpenSpec change flow for a named change — verify it actually reached its end — or with --abandon destroy the change and its code, after pinning the commits to a verified remote tag.
+description: Stop the OpenSpec change flow for a named change — closing it if it reached its end, suspending it with a recorded resume point if it did not — or with --abandon destroy the change and its code, after pinning the commits to a verified remote tag.
 ---
 
-Close the flow for one named OpenSpec change. Take the name from the argument.
+Stop the flow for one named OpenSpec change. Take the name from the argument.
+
+**Stopping just stops.** It does not judge whether the change is finished, and it
+never merges, archives or implements anything to make the change look finished.
+It ends the binding order established at `/start-change` and records where the
+work stands, so nothing afterwards proceeds on green by itself.
 
 Two modes:
 
-- **no flag** — the change reached its end. Verify that it did, rather than
-  taking the request as evidence.
+- **no flag** — stop the flow. The change either *reached its end* (archived and
+  merged: nothing is left to do, and the stop is final) or it did not (the stop
+  **suspends** it, and `/start-change <name>` resumes it later).
 - **`--abandon`** — the change is being given up. Destroy it: the proposal, the
   code, the branch and the pull request. Pin the commits to a remote tag first,
   and verify the pin before deleting anything.
 
-`--abandon` refuses without an explicit name. Every other step here reads state;
-this one deletes branches and code, and inferring *which* change from
-`openspec list` is how the wrong work gets destroyed.
+`--abandon` refuses without an explicit name. Every other step here reads or
+records state; this one deletes branches and code, and inferring *which* change
+from `openspec list` is how the wrong work gets destroyed.
 
 Neither mode merges anything. Merge is still the gate, and still the human's.
 
-## Closing a finished change
+## Stopping the flow
 
-**1. Refuse while the change is still unarchived.**
+**1. Read where the change actually stands.** Do not take the request as
+evidence of a state; the whole point of a stop is that it can happen anywhere.
 
 ```bash
-find openspec/changes -mindepth 1 -maxdepth 1 -type d ! -name archive
-ls -d openspec/changes/archive/*<name>* 2>/dev/null
+find openspec/changes -mindepth 1 -maxdepth 1 -type d -name '<name>'   # unarchived?
+ls -d openspec/changes/archive/*<name>* 2>/dev/null                    # archived?
+git log --oneline @{upstream}..HEAD                                    # anything local only?
+gh pr view <n> --json number,state,mergedAt,mergeStateStatus
 ```
 
-A directory still under `openspec/changes/` means `openspec archive` never ran.
-Report it and stop — `/archive-on-green` is the step that was skipped.
+**2. Push anything that exists only here.** A resume point that lives on one
+machine is the `rescue/full-spike-work` failure in slow motion: the flow stops,
+the laptop is closed, and the change can only be picked up where it was left.
+Push before recording the stop, and if pushing is impossible say plainly that the
+resume point is local, naming the SHA.
 
-This refusal is the one with a receipt. In the session that produced this
+**3. Refuse a clean close when the pull request is merged and the delta is not
+applied.**
+
+```bash
+git fetch -q origin
+git merge-base --is-ancestor HEAD origin/<base> && \
+  find openspec/changes -mindepth 1 -maxdepth 1 -type d -name '<name>'
+```
+
+Both true is the **inversion**: the code shipped while the specification still
+describes it as proposed. Report it as a defect and say the remedy — archive now,
+in its own pull request — rather than recording a tidy close over it.
+
+This is the one refusal here with a receipt. In the session that produced this
 command, a change was merged first and archived afterwards, in a second pull
-request needing a second merge. That inverts step 7 of `/archive-on-green`
-("stop before merging") and costs exactly the extra gate the one-gate design
-exists to remove. Nothing refused it, because nothing was watching the order.
+request needing a second merge, inverting step 7 of `/archive-on-green` ("stop
+before merging") and costing exactly the extra gate the one-gate design exists to
+remove. Nothing refused it, because nothing was watching the order.
 
-**2. Refuse while anything is still outstanding.**
+Note what this does **not** refuse: an unarchived change whose pull request is
+still open. That is ordinary unfinished work, and stopping is allowed to leave it
+unfinished. Only *merged* and unarchived is a defect.
+
+**4. Record the stop where the resume can find it.**
+
+For a change that reached its end — archived, merged — there is nothing to
+resume. Report the close and stop. No marker is written, because a marker that
+says "resume this" over finished work is worse than none.
+
+Otherwise write the resume point into the change itself, commit it and push it:
 
 ```bash
-git log --oneline @{upstream}..HEAD
-gh pr view <n> --json state,mergedAt,mergeCommit
+cat > openspec/changes/<name>/STOPPED.md <<'EOF'
+# Stopped
+
+- **stopped**: <date>
+- **reason**: <why the flow was stopped>
+- **head**: <SHA>
+- **branch**: <branch>
+- **pr**: <number or "none">
+- **next step**: <the step /start-change should resume at>
+EOF
+git add -- openspec/changes/<name>/STOPPED.md
+git commit -m 'chore(openspec): stop <name>' -- openspec/changes/<name>/STOPPED.md
+git push
 ```
 
-Unpushed commits: push, then reopen this. An open pull request: the change has
-not reached its end — report what remains (checks running, review outstanding,
-merge not requested) and hold. Do not merge to satisfy this command.
+A file rather than an inference, for the reason the checker uses markers at all:
+intent is declared, never guessed. "There is a change directory and no session
+open" is a guess, and it reads the same for a change stopped deliberately, a
+change someone is mid-way through on another branch, and a change nobody has
+touched in a month. `STOPPED.md` distinguishes them, travels with the branch,
+shows up in the pull request, and is removed by the resume that consumes it.
 
-**3. Report the close.**
-
-The change name, the archived path, the merge commit, and one line saying the
-flow is closed: the order established at `/start-change` no longer binds, and
-nothing about this change proceeds on green any more.
+**5. Report the stop.** The name, which outcome it was (closed or suspended), the
+resume point if suspended, and one line saying the order no longer binds: nothing
+about this change archives, merges or proceeds on green until `/start-change`
+opens it again.
 
 ## Abandoning a change (`--abandon`)
 
@@ -149,10 +197,11 @@ in this package, because none of them read application code.
 one-line recovery command above, the closed pull request, which branches were
 deleted, and whether anything had to be reverted on the base.
 
-## Never, in either mode
+## Never, in any mode
 
-Destroy before `git ls-remote` has confirmed the tag on the remote. Force-push
-the base. `rm` or discard an uncommitted file instead of committing it first.
+Archive, merge or implement anything to make a stop look tidier than the state it
+found. A stop reports what is there. Destroy before `git ls-remote` has confirmed
+the tag on the remote. Force-push the base. `rm` or discard an uncommitted file instead of committing it first.
 `openspec archive` an abandoned delta. Delete a branch whose commits no remote
 ref reaches — that is not abandoning work, it is losing it, and the two are told
 apart by exactly one command.

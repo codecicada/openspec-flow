@@ -56,6 +56,12 @@ So intent is always stated with a marker (`drops-scenario`, `enumerates`), and
 without a marker the checker assumes nothing. An undeclared inventory passes. An
 undeclared omission fails.
 
+The flow follows the same rule outside the checker. A suspended change records
+`openspec/changes/<name>/STOPPED.md` — reason, head SHA, branch, PR, next step —
+rather than leaving a resume to infer one. "A change directory with no session
+open" reads identically for work stopped deliberately, work in progress on
+another branch, and work nobody has touched in a month.
+
 ## 5. Place a marker by what it describes
 
 `openspec archive` copies requirement bodies into the main spec. A marker about
