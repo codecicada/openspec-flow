@@ -1,6 +1,6 @@
 ---
 name: stop-change
-description: Close the OpenSpec change flow for a named change — verify it actually reached its end — or with --abandon give the change up without destroying the work.
+description: Close the OpenSpec change flow for a named change — verify it actually reached its end — or with --abandon destroy the change and its code, after pinning the commits to a verified remote tag.
 ---
 
 Close the flow for one named OpenSpec change. Take the name from the argument.
@@ -9,12 +9,13 @@ Two modes:
 
 - **no flag** — the change reached its end. Verify that it did, rather than
   taking the request as evidence.
-- **`--abandon`** — the change is being given up. Preserve everything first, then
-  remove only what is safe to remove.
+- **`--abandon`** — the change is being given up. Destroy it: the proposal, the
+  code, the branch and the pull request. Pin the commits to a remote tag first,
+  and verify the pin before deleting anything.
 
 `--abandon` refuses without an explicit name. Every other step here reads state;
-this one discards a proposal, and inferring *which* proposal from `openspec list`
-is how the wrong one gets discarded.
+this one deletes branches and code, and inferring *which* change from
+`openspec list` is how the wrong work gets destroyed.
 
 Neither mode merges anything. Merge is still the gate, and still the human's.
 
@@ -55,11 +56,19 @@ nothing about this change proceeds on green any more.
 
 ## Abandoning a change (`--abandon`)
 
-Abandon means: this change will not ship, and its proposal must stop presenting
-itself as in flight. It does **not** mean deleting work.
+Abandon means: this change will not ship, and **everything it produced leaves the
+working repository** — the proposal, the implementation code, the branch and the
+pull request. The repository ends up as though the change had never been opened.
 
-The ordering is the whole design: **preserve, then remove.** Every step that
-loses something comes after the step that makes it recoverable.
+It is a destructive mode, and it says so. What it must never be is *silently*
+destructive: the commits are pinned to one recoverable ref on the remote, and
+that ref is verified to exist **before** anything is deleted. Destroyed and
+recoverable is the goal. Destroyed and reachable only from this machine is the
+failure — a spike in the consumer repository survived as six commits on a local
+branch and nothing else, no remote, no pull request, no tag, so recovering it
+needed the machine it was written on.
+
+So the ordering is: **pin, verify the pin, then destroy.**
 
 **1. Refuse if the work is already merged.**
 
@@ -68,67 +77,82 @@ git fetch -q origin
 git merge-base --is-ancestor HEAD origin/<base> && echo 'already merged'
 ```
 
-Merged means there is nothing to abandon — the code shipped. Removing the
-proposal here would leave live code with no specification, which is spec drift
-created deliberately, and no check in this package can see it. Report and stop:
-either close it properly (no flag, after archiving) or write a new change that
-removes the behaviour.
+Merged means this mode cannot do its job: the code is in the base, and deleting
+a branch does not remove it. Reverting shipped behaviour is a change of its own,
+with its own delta and its own review — not a flag. Report and stop.
 
-**2. Make every commit reachable from somewhere other than this machine.**
+**2. Commit whatever is loose, so the pin can cover it.**
 
 ```bash
-git rev-parse --abbrev-ref --symbolic-full-name @{upstream} || echo 'no upstream'
-git log --oneline @{upstream}..HEAD
+git status --porcelain
+git add -- <explicit paths> && git commit -m 'wip: work in progress at abandon'
 ```
 
-No upstream, or commits ahead of it: **push before anything else**, even though
-the branch is being abandoned.
+Uncommitted work cannot be tagged, and step 4 would destroy it. Never `rm` an
+uncommitted file and never discard one to "clean up" first: commit it onto the
+branch that is about to be pinned, however unfinished it is.
 
-This is step 2 rather than an afterthought because of how the failure actually
-looks. A spike in the consumer repository survived as six commits on a local
-branch and nothing else — no remote, no pull request, no tag — so recovering it
-required the machine it was written on. A push costs nothing and is the whole
-difference between abandoned and lost.
-
-If pushing is refused or impossible, tag instead:
+**3. Pin every commit to the remote, and verify the pin.**
 
 ```bash
-git tag abandoned/<name> && git push origin abandoned/<name>
+git tag -a -m 'Abandoned: <reason>' abandoned/<name>
+git push origin abandoned/<name>
+git ls-remote --tags origin 'refs/tags/abandoned/<name>'   # must print the SHA
 ```
 
-If that is impossible too, **say plainly that the work exists only on this
-machine**, and name the SHA. Do not continue to step 4 having said it quietly.
+Annotated, so the reason travels with the ref rather than living only in the
+pull request that is about to be closed.
 
-**3. Close the pull request. Do not delete the branch.**
+The tag is the survivor, and it is mandatory rather than a fallback. Everything
+step 4 deletes — both branches, the change directory, the code — is reachable
+from it afterwards:
 
 ```bash
-gh pr close <n> --comment 'Abandoned: <reason>. Branch kept at <SHA>.'
+git fetch origin 'refs/tags/abandoned/<name>:refs/tags/abandoned/<name>'
+git checkout -b <name>-recovered abandoned/<name>
 ```
 
-Closing is reversible and keeps the diff, the review and the CI history
-readable, which is most of what the abandoned attempt was worth. Deleting the
-branch is not on the list, and `--delete-branch` is never passed: it throws away
-the ref that step 2 just worked to create.
+**If `git ls-remote` prints nothing, stop here.** Report that the work exists
+only on this machine, name the SHA, and destroy nothing. A failed push is the one
+condition that converts this command into a no-op — an unverified pin is the
+`rescue/full-spike-work` state with a tag name on it.
 
-**4. Remove the change directory, in a commit of its own.**
+**4. Destroy the work.**
 
 ```bash
+gh pr close <n> --comment 'Abandoned: <reason>. Recoverable at tag abandoned/<name> (<SHA>).'
+git checkout <base> && git pull --ff-only
+git branch -D <name>                  # safe only because step 3 verified the tag
+git push origin --delete <name>
+```
+
+The change directory and the implementation code go with the branch: they were
+never on the base, so there is nothing left to remove from it. `-D` rather than
+`-d` is deliberate and is the one place the verified tag is load-bearing.
+
+If the change's code or its `openspec/changes/<name>/` directory did reach the
+base — a shared branch, or a partial push — that part is **not** branch-deletable.
+Revert it explicitly, in one commit, and say so in the report:
+
+```bash
+git revert --no-commit <first>..<last>
 git rm -r openspec/changes/<name>
-git commit -m 'chore(openspec): abandon <name>' -- openspec/changes/<name>
+git commit -m 'revert(openspec): abandon <name>'
 ```
 
-Do **not** run `openspec archive` on an abandoned change. Archive applies the
-delta to `openspec/specs/`, which would publish an accepted requirement for a
-change nobody accepted — and a spec describing behaviour no code implements
-passes every check in this package, because none of them read application code.
-Committing the removal keeps the proposal in history, recoverable by SHA, and
-leaves `openspec/specs/` untouched.
+Never run `openspec archive` on an abandoned change. Archive applies the delta to
+`openspec/specs/`, publishing an accepted requirement for a change nobody
+accepted — and a spec describing behaviour no code implements passes every check
+in this package, because none of them read application code.
 
-**5. Report, plainly.** The abandoned name, the reason, the branch and SHA where
-the commits live, the pull request, and the commit that removed the directory.
+**5. Report, plainly.** The abandoned name, the reason, the tag and its SHA, the
+one-line recovery command above, the closed pull request, which branches were
+deleted, and whether anything had to be reverted on the base.
 
 ## Never, in either mode
 
-Force-push. Delete a remote branch. `openspec archive` an abandoned delta. `rm`
-an uncommitted file. Abandoning a change is a decision about what happens next;
-it is not a licence to edit what already happened.
+Destroy before `git ls-remote` has confirmed the tag on the remote. Force-push
+the base. `rm` or discard an uncommitted file instead of committing it first.
+`openspec archive` an abandoned delta. Delete a branch whose commits no remote
+ref reaches — that is not abandoning work, it is losing it, and the two are told
+apart by exactly one command.

@@ -251,41 +251,64 @@ request is still open, and it never merges anything to satisfy itself.
 
 ## Abandoning a change
 
-`/stop-change <name> --abandon` gives a change up. It requires the name
-explicitly: every other step reads state, this one discards a proposal, and
-inferring *which* proposal is how the wrong one gets discarded.
+`/stop-change <name> --abandon` **destroys** a change. The proposal, the
+implementation code, the branch and the pull request all leave the working
+repository, which ends up as though the change had never been opened. It
+requires the name explicitly: every other step reads state, this one deletes
+branches and code, and inferring *which* change is how the wrong work gets
+destroyed.
 
-The ordering is the design — **preserve, then remove**:
+Destructive is the point. *Silently* destructive is the failure, and the two are
+told apart by one command — so the ordering is **pin, verify the pin, then
+destroy**:
 
 ```mermaid
 flowchart TD
-  b1{"already merged into<br/>the base?"} -- yes --> stopM(["Refuse: nothing to abandon,<br/>the code shipped"])
-  b1 -- no --> b2["Push the branch,<br/>even though it is being abandoned"]
-  b2 --> b2q{"pushed, or tagged<br/>abandoned/name?"}
-  b2q -- no --> sayso(["Say plainly that the work<br/>exists only on this machine"])
-  b2q -- yes --> b3["gh pr close, with a reason<br/>never --delete-branch"]
-  b3 --> b4["git rm -r the change directory,<br/>in a commit of its own"]
-  b4 --> b5(["Report: name, reason, branch SHA,<br/>PR, removing commit"])
+  b1{"already merged<br/>into the base?"} -- yes --> stopM(["Refuse: a branch delete<br/>cannot remove shipped code.<br/>Revert it as its own change"])
+  b1 -- no --> b2["Commit anything loose,<br/>so the pin can cover it"]
+  b2 --> b3["git tag -a abandoned/name<br/>git push origin abandoned/name"]
+  b3 --> b3q{"git ls-remote prints<br/>the tag's SHA?"}
+  b3q -- no --> noop(["No-op: report the SHA,<br/>destroy nothing"])
+  b3q -- yes --> b4["gh pr close"]
+  b4 --> b5["git branch -D name<br/>git push origin --delete name"]
+  b5 --> b6["Anything that reached the base:<br/>revert it in one commit"]
+  b6 --> b7(["Report: tag, SHA,<br/>recovery command, what was deleted"])
+
+  classDef question fill:#e0e7ff,stroke:#4338ca,color:#1f2937;
+  class b1 question;
+  class b3q question;
 ```
 
-Three things that step ordering buys:
+What each step buys:
 
-- **The branch is pushed first.** A spike in the consumer repository survived as
-  six commits on a local branch and nothing else — no remote, no pull request, no
-  tag — so recovering it needed the machine it was written on. A push costs
-  nothing and is the whole difference between abandoned and lost.
-- **The pull request is closed, not the branch deleted.** Closing keeps the diff,
-  the review and the CI history, which is most of what the attempt was worth.
-  `--delete-branch` would throw away the ref the previous step just created.
-- **The change directory is removed, not archived.** `openspec archive` applies
-  the delta to `openspec/specs/`, publishing an accepted requirement for a change
+- **Loose work is committed, never discarded.** An uncommitted file cannot be
+  tagged, and the delete two steps later would take it. It goes onto the branch
+  that is about to be pinned, however unfinished.
+- **The tag is mandatory, not a fallback, and it is verified on the remote.** It
+  is the single survivor, and it is what makes `git branch -D` and
+  `git push origin --delete` safe rather than reckless. A spike in the consumer
+  repository survived as six commits on a local branch and nothing else — no
+  remote, no pull request, no tag — so recovering it needed the machine it was
+  written on. An unverified push is that state with a tag name on it, which is
+  why a failed `git ls-remote` makes the whole command a no-op.
+- **Recovery is one command, and it is printed in the report:**
+
+  ```bash
+  git fetch origin 'refs/tags/abandoned/<name>:refs/tags/abandoned/<name>'
+  git checkout -b <name>-recovered abandoned/<name>
+  ```
+
+- **Code that reached the base is reverted explicitly.** Deleting a branch does
+  not remove what is no longer only on it, so a partial push or a shared branch
+  is reverted in one commit and named in the report.
+- **The change directory is never archived.** `openspec archive` applies the
+  delta to `openspec/specs/`, publishing an accepted requirement for a change
   nobody accepted — and a spec describing behaviour no code implements passes
-  every check in this package, because none of them read application code. A
-  `git rm` in its own commit keeps the proposal recoverable by SHA and leaves the
-  specs untouched.
+  every check in this package, because none of them read application code.
 
-Already-merged work cannot be abandoned: there is nothing to give up, and
-removing the proposal would leave live behaviour unspecified.
+Already-merged work cannot be abandoned at all: the code is in the base, and no
+branch delete removes it. Reverting shipped behaviour is a change of its own,
+with its own delta and its own review.
 
 ## How the brackets were watched refusing
 
@@ -296,20 +319,35 @@ something different in the refusing state than in the adjacent permitting one.
 
 `scripts/gates/refusal-cases.sh` (`npm run test:gates`, and a CI job) builds each
 refusing state in a throwaway repository and reports both directions of every
-boundary — 16 observations over git and the filesystem alone, with no network, no
+boundary — 19 observations over git and the filesystem alone, with no network, no
 `gh` and no `openspec`. It covers the dirty tree, the moved base, the reused name
 (and the resume it must be told apart from), the second open change, the
-unarchived close, a branch with no upstream, a branch ahead of its upstream, and
-work already merged.
+unarchived close, loose work at abandon, a tag that exists only locally, a tag
+verified on the remote, and work already merged.
 
-Watched failing before being trusted: narrowing the name search to `-maxdepth 1`
-reddens exactly the two observations that read it, and stubbing `@{upstream}` so
-it always resolves reddens exactly the no-upstream refusal.
+`--abandon` also gets one observation that is not a refusal, because its design
+is a claim about what survives destruction: the harness deletes both branches and
+then restores the work from the tag **in a clone that never had the branch**.
+
+Watched failing before being trusted, three mutations:
+
+| mutation | reddens |
+|---|---|
+| name search narrowed to `-maxdepth 1` | the two observations that read it, and nothing else |
+| the abandon pin checked with `git tag -l` instead of `git ls-remote` | the local-only-tag refusal |
+| the tag push skipped while the destroy still runs | the pin check **and** the recovery — `rescue/full-spike-work` reproduced on demand |
+
+The third mutation also found a defect in the harness itself: the recovery
+checkout sat above its `if`, so under `set -e` a missing tag killed the run
+instead of reporting a failure. One failure and no summary is what that looks
+like, and it is why the checkout is now inside the condition.
 
 The run prints what it does not cover, so a green is not read as more than it is:
 the "does this deserve a change?" judgement, which no command decides; the
-pull-request states, which need a live GitHub; and whether an agent obeys a
-refusal it can see. Observability is necessary, not sufficient.
+pull-request states, which need a live GitHub; reverting code that reached the
+base, which is an ordinary `git revert` behind a refusal the harness does cover;
+and whether an agent obeys a refusal it can see. Observability is necessary, not
+sufficient.
 
 ## Where each state lives
 
@@ -324,11 +362,11 @@ stateDiagram-v2
   Archived --> Archived: red, fix, push
   Archived --> Merged: verified green AND explicit request
   Merged --> Closed: /stop-change
-  Open --> Abandoned: /stop-change --abandon
-  Proposed --> Abandoned: /stop-change --abandon
-  InReview --> Abandoned: /stop-change --abandon
+  Open --> Destroyed: /stop-change --abandon
+  Proposed --> Destroyed: /stop-change --abandon
+  InReview --> Destroyed: /stop-change --abandon
   Closed --> [*]
-  Abandoned --> [*]
+  Destroyed --> [*]
 
   note right of Proposed
     openspec/changes/name/
@@ -337,6 +375,11 @@ stateDiagram-v2
   note right of Archived
     delta applied to openspec/specs/
     change moved to changes/archive/
+  end note
+  note right of Destroyed
+    branch, code, proposal and PR gone
+    commits survive only at the
+    verified tag abandoned/name
   end note
 ```
 

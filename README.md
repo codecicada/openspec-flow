@@ -27,7 +27,7 @@ built — with diagrams — are in [`docs/`](docs/README.md).
 - `/start-change` — open the flow: does this deserve a change, is the tree clean, is the base current, is the name free
 - `/archive-on-green` — pin the head SHA, confirm each check by name, archive, verify the apply
 - `/verify-green` — is this PR actually green, against its current head?
-- `/stop-change` — close a change that reached its end, or `--abandon` one without losing the work
+- `/stop-change` — close a change that reached its end, or `--abandon` one: destroy it, code and all, after pinning the commits to a verified remote tag
 
 `/start-change` and `/stop-change` bracket the flow; merge stays the only gate
 *inside* it. Why that is not a contradiction of "one gate" is argued in the
@@ -155,14 +155,24 @@ test reports three failures.
 `scripts/gates/refusal-cases.sh` does the same job for the two gates, which are
 prose and so cannot be run. It builds each refusing state in a throwaway
 repository and checks that the detection command the command file names says
-something **different** there than in the adjacent permitting state — 16
+something **different** there than in the adjacent permitting state — 19
 observations, both directions of every boundary. A refusal whose condition no
-command can observe is a sentence, not a gate. Watched failing too: narrowing the
-name search to `-maxdepth 1` reddens exactly the two observations that read it,
-and stubbing `@{upstream}` so it always resolves reddens exactly the no-upstream
-refusal. What it does **not** cover is printed by the run itself — the "does this
-deserve a change?" judgement, the pull-request states, and whether an agent obeys
-a refusal it can see.
+command can observe is a sentence, not a gate.
+
+One observation is not a refusal: `--abandon` destroys a branch, so the harness
+deletes both branches and then restores the work from the verified tag **in a
+clone that never had it**. Claiming "recoverable" without recovering it once is
+the kind of green this repository refuses everywhere else.
+
+Watched failing too — three mutations, each reddening exactly what reads it:
+narrowing the name search to `-maxdepth 1` takes the two observations that use
+it; checking the abandon pin with a local `git tag -l` instead of `git ls-remote`
+takes the local-only-tag refusal; and skipping the tag push while the destroy
+runs anyway takes both the pin check **and** the recovery, which is the
+`rescue/full-spike-work` failure reproduced on demand. What the harness does
+**not** cover is printed by the run itself — the "does this deserve a change?"
+judgement, the pull-request states, reverting code that reached the base, and
+whether an agent obeys a refusal it can see.
 
 ## Licence
 

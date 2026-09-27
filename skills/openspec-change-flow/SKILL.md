@@ -135,19 +135,30 @@ the instruction is about intent, not timing.
 the change is still unarchived** — that refusal is the inversion above, caught by
 construction.
 
-`/stop-change <name> --abandon` gives a change up. Abandoning is ordered
-**preserve, then remove**: every commit reaches a remote (or a pushed tag) before
-anything is deleted, the pull request is closed rather than the branch deleted,
-and the change directory is removed in a commit of its own rather than archived —
-archiving would publish an accepted spec for a change nobody accepted.
+`/stop-change <name> --abandon` **destroys** a change: the proposal, the
+implementation code, the branch and the pull request all leave the working
+repository, which ends up as though the change had never been opened.
 
-Why that order is written down at all: a spike in the consumer repository
-survived as six commits on a local branch and nothing else — no remote, no pull
-request, no tag — so recovering it needed the machine it was written on.
-Abandoning a change must not be able to produce that state.
+It is destructive by design and must never be *silently* destructive, so it is
+ordered **pin, verify the pin, then destroy**. Every commit — including anything
+loose, committed first rather than discarded — is pinned to `abandoned/<name>` on
+the remote, and `git ls-remote` must print that tag's SHA **before** anything is
+deleted. A push that cannot be verified turns the whole command into a no-op that
+reports the SHA and deletes nothing.
 
-Already-merged work cannot be abandoned. There is nothing to give up; the code
-shipped, and removing its proposal would leave live behaviour unspecified.
+That one command is what separates abandoning work from losing it. A spike in the
+consumer repository survived as six commits on a local branch and nothing else —
+no remote, no pull request, no tag — so recovering it needed the machine it was
+written on. The tag is why `git branch -D` and `git push origin --delete` are
+safe here; without it they produce exactly that state.
+
+Never `openspec archive` an abandoned change: archive applies the delta to
+`openspec/specs/`, publishing an accepted requirement for a change nobody
+accepted.
+
+Already-merged work cannot be abandoned — deleting a branch does not remove code
+that is already in the base. Reverting shipped behaviour is a change of its own,
+with its own delta and its own review.
 
 ## Staging
 
