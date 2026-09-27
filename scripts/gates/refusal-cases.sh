@@ -16,6 +16,12 @@
 # directions of the boundary — because a condition that is "true" in every state
 # refuses everything and would be dropped within a week.
 #
+# `--abandon` gets one observation that is not a refusal, because its whole
+# design is a claim about what survives destruction: after both branches are
+# deleted, the work is restored from the verified tag in a clone that never had
+# the branch. Claiming "recoverable" without restoring it once is the kind of
+# green this repository refuses everywhere else.
+#
 # It needs no network, no `gh`, no `openspec` and no fixtures on disk: every
 # refusal covered here is decidable from git and the filesystem alone. The ones
 # that are not are listed at the end of the run, out loud, rather than being
@@ -23,6 +29,14 @@
 #
 # Run it from anywhere: sh scripts/gates/refusal-cases.sh
 set -eu
+
+# The host's git config must not be able to change what this harness observes.
+# It already did once: a global `tag.forceSignAnnotated` turned `git tag` into
+# "fatal: no tag message?" here, which is a property of this machine and not of
+# the gate under test.
+GIT_CONFIG_GLOBAL=/dev/null
+GIT_CONFIG_SYSTEM=/dev/null
+export GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM
 
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT INT TERM
@@ -99,9 +113,8 @@ detect_dirty() { git -C "$1" status --porcelain; }
 detect_behind() { git -C "$1" rev-list --count "HEAD..origin/$BASE"; }
 detect_name() { (cd "$1" && find openspec/changes -maxdepth 2 -type d -name "*$2*"); }
 detect_open() { (cd "$1" && find openspec/changes -mindepth 1 -maxdepth 1 -type d ! -name archive); }
-detect_unpushed() { git -C "$1" log --oneline '@{upstream}..HEAD' 2>/dev/null; }
-detect_upstream() { git -C "$1" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null; }
 detect_merged() { git -C "$1" merge-base --is-ancestor HEAD "origin/$BASE"; }
+detect_pin() { git -C "$1" ls-remote --tags origin "refs/tags/abandoned/$2"; }
 
 printf '\n# /start-change\n\n'
 
@@ -212,38 +225,79 @@ else
   observe fail 'after archiving, the change should be found under changes/archive/ and nowhere else'
 fi
 
-# --- 6. abandoning work that exists only on this machine --------------------
+# --- 6. abandoning work that is not pinned anywhere but this machine --------
 #
-# The `rescue/full-spike-work` failure mode: six commits, no remote, no PR, no
-# tag. Both shapes of it are covered — a branch with no upstream at all, and one
-# whose upstream is behind — because the first makes `@{upstream}` fail rather
-# than print, and a check that reads only the second's output would miss it.
+# `--abandon` destroys: branch, code, proposal, pull request. The single thing
+# standing between that and the `rescue/full-spike-work` failure mode — six
+# commits, no remote, no PR, no tag — is a tag that is verified to exist on the
+# remote BEFORE any delete runs. So the refusal is not "is there an upstream"
+# but "does ls-remote print the tag's SHA", and an unverified push has to read
+# the same as no push at all.
 
-R=$(new_repo unpushed)
+R=$(new_repo unpinned)
 git -C "$R" checkout -q -b spike/full-work
 printf 'spike\n' >>"$R/src/app.txt"
 git -C "$R" commit -qam 'feat: spike work nobody else can see'
+printf 'loose\n' >>"$R/src/app.txt"
 
-if [ -z "$(detect_upstream "$R")" ]; then
-  observe ok 'abandon refuses a branch with no upstream: @{upstream} does not resolve'
+if [ -n "$(detect_dirty "$R")" ]; then
+  observe ok 'abandon refuses while work is loose: it cannot be tagged, and the delete would take it'
 else
-  observe fail "a fresh local branch should have no upstream; got: $(detect_upstream "$R")"
+  observe fail 'abandon should refuse uncommitted work, but git status --porcelain printed nothing'
 fi
 
+git -C "$R" commit -qam 'wip: work in progress at abandon'
+if [ -z "$(detect_dirty "$R")" ]; then
+  observe ok 'abandon permits once the loose work is committed onto the branch being pinned'
+else
+  observe fail 'after committing, the tree should be clean'
+fi
+
+# The tag exists locally but was never pushed. This is the state that reads as
+# "pinned" to anything that checks the wrong thing, and it is exactly the
+# failure mode: a tag name on top of commits only this machine can reach.
+git -C "$R" tag -a -m 'Abandoned: superseded' 'abandoned/spike-full-work'
+if [ -z "$(detect_pin "$R" 'spike-full-work')" ]; then
+  observe ok 'abandon refuses a local-only tag: ls-remote prints nothing, so nothing is destroyed'
+else
+  observe fail 'an unpushed tag must not read as pinned on the remote'
+fi
+
+git -C "$R" push -q origin 'refs/tags/abandoned/spike-full-work' 2>/dev/null
+PIN=$(detect_pin "$R" 'spike-full-work')
+if [ -n "$PIN" ]; then
+  observe ok 'abandon permits destruction once ls-remote prints the tag SHA'
+else
+  observe fail 'a pushed tag should be visible to ls-remote'
+fi
+
+# And the property the whole ordering exists to produce: after the destroy runs
+# — both branches deleted, the code gone from the checkout — the commits are
+# still reachable. Verified from a clone that never saw the branch, because
+# reachability on the machine that did the work proves nothing.
 git -C "$R" push -q -u origin spike/full-work 2>/dev/null
-printf 'more spike\n' >>"$R/src/app.txt"
-git -C "$R" commit -qam 'feat: a commit made after the push'
-if [ -n "$(detect_unpushed "$R")" ]; then
-  observe ok 'abandon refuses a branch ahead of its upstream: the commit is named'
+git -C "$R" checkout -q "$BASE"
+git -C "$R" branch -qD spike/full-work
+git -C "$R" push -q origin --delete spike/full-work 2>/dev/null
+
+ROOT=$(dirname "$R")
+git clone -q "$ROOT/origin.git" "$ROOT/recovery"
+# The checkout is inside the condition, not above it: a tag that was never
+# pushed makes it fail, and under `set -e` that would kill the run instead of
+# reporting the observation. Found by mutating the tag push away and getting one
+# failure and no summary.
+if git -C "$ROOT/recovery" checkout -q -b recovered 'abandoned/spike-full-work' 2>/dev/null &&
+  grep -q '^spike$' "$ROOT/recovery/src/app.txt" &&
+  grep -q '^loose$' "$ROOT/recovery/src/app.txt"; then
+  observe ok 'the destroyed branch is recoverable from the tag in a clone that never had it'
 else
-  observe fail 'abandon should refuse unpushed commits, but the ahead-list was empty'
+  observe fail 'after destroying both branches, the tag should still restore the work in a fresh clone'
 fi
 
-git -C "$R" push -q origin spike/full-work 2>/dev/null
-if [ -z "$(detect_unpushed "$R")" ] && [ -n "$(detect_upstream "$R")" ]; then
-  observe ok 'abandon permits removal once every commit is on the remote'
+if [ -z "$(git -C "$R" ls-remote --heads origin spike/full-work)" ]; then
+  observe ok 'abandon really destroys: the remote branch is gone, only the tag remains'
 else
-  observe fail 'after pushing, the branch should have an upstream and nothing ahead of it'
+  observe fail 'the abandoned remote branch should have been deleted'
 fi
 
 # --- 7. abandoning work that already shipped --------------------------------
@@ -285,6 +339,9 @@ cat <<'NOTE'
 #     prompt to a person, and it is worth exactly what that person answers.
 #   - the pull-request states (open PR at close, gh pr close at abandon). They
 #     need a live GitHub; `/verify-green` already covers reading check state.
+#   - reverting code that reached the base. It is an ordinary `git revert` and
+#     the refusal above it — already-merged work cannot be abandoned — is what
+#     this harness covers instead.
 #   - that an agent obeys a refusal. Observability is necessary, not sufficient.
 NOTE
 
