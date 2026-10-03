@@ -52,7 +52,38 @@ stack. 37 unit tests, no fixtures on disk.
 
 ## Install
 
-Add the plugin, then wire the checker into the consumer repository:
+The repository is its own Claude Code marketplace. Enable the plugin for
+everyone who opens the consumer repository by committing this to its
+`.claude/settings.json`:
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "openspec-flow": {
+      "source": {
+        "source": "github",
+        "repo": "yannicklescure/openspec-flow",
+        "ref": "v0.2.1"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "openspec-flow@openspec-flow": true
+  }
+}
+```
+
+Pin `ref` to a tag for the same reason the checker is pinned: a moving default
+branch would change the flow an agent follows without a commit in the consumer.
+Claude Code offers to install the marketplace and the plugin the first time the
+repository is trusted. For one machine only, without touching the repository:
+
+```bash
+claude plugin marketplace add yannicklescure/openspec-flow
+claude plugin install openspec-flow@openspec-flow
+```
+
+Then wire the checker into the consumer repository:
 
 ```bash
 # 1. run the checks
