@@ -63,7 +63,7 @@ everyone who opens the consumer repository by committing this to its
       "source": {
         "source": "github",
         "repo": "yannicklescure/openspec-flow",
-        "ref": "v0.2.1"
+        "ref": "v0.2.2"
       }
     }
   },
