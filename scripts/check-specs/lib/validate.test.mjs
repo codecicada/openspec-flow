@@ -49,6 +49,25 @@ Totals: 16 passed, 2 failed (18 items)`,
   );
 });
 
+test('an indented issue line under a failing item is not another item', () => {
+  // The exact shape @fission-ai/openspec 1.13.2 and 1.14.0 print for a spec
+  // with no Purpose section: the item, then its issue indented beneath it.
+  const failures = checkStrictValidation({
+    run: () => ({
+      status: 1,
+      stdout: `✗ spec/x
+  ✗ [ERROR] file: Spec must have a Purpose section. Missing required sections. Expected headers: "## Purpose" and "## Requirements". Example:
+Totals: 0 passed, 1 failed (1 items)`,
+      stderr: '',
+    }),
+  });
+
+  deepStrictEqual(
+    failures.map((f) => f.what.split(':')[0]),
+    ['x'],
+  );
+});
+
 test('a non-zero exit whose output names nothing still fails loudly', () => {
   const failures = checkStrictValidation({
     run: () => ({
