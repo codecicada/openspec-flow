@@ -7,7 +7,8 @@ version: 0.2.0
 # The change flow
 
 ```
-/start-change <name>            <- opens the flow, or resumes a suspended one
+/start-change <description>     <- names the change, opens the flow,
+                                   or resumes a suspended one
   opsx explore -> propose -> apply -> open PR -> watch CI
     on green: archive, then merge on explicit request
     on red:   fix, push, watch again
@@ -75,8 +76,10 @@ established as binding, because the flow was never explicitly opened.
 
 ## Opening or resuming the flow
 
-`/start-change <name>` — see the command for the full procedure. Two ways in,
-decided by what is on disk rather than by a flag:
+`/start-change <description>` — see the command for the full procedure. The
+user describes the work; the command proposes a session title and a kebab-case
+change slug from it, or matches the description to a change already open. Then
+two ways in, decided by what is on disk rather than by a flag:
 
 - **Fresh** — nothing under `openspec/changes/<name>/`. "Does this deserve a
   change?" is answered out loud first.
@@ -87,8 +90,8 @@ decided by what is on disk rather than by a flag:
   is read, its head SHA is verified to still resolve, and the recorded next step
   is restated. A resume point naming a commit no ref reaches is a refusal.
 
-Either way it refuses a dirty tree, a base that has moved, a name already in
-`changes/archive/`, or a *different* second active change. Each refusal exists
+Either way it refuses a dirty tree, a base that has moved, or a *different*
+second active change, and it never uses a slug already in `changes/archive/`. Each refusal exists
 because a later step would otherwise measure the wrong thing; the command says
 which step, for each. A resume consumes its marker in the commit that resumes.
 

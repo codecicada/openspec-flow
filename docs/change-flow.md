@@ -7,7 +7,7 @@ source of truth is the `openspec-change-flow` skill; this page draws it.
 
 ```mermaid
 flowchart TD
-  start(["Idea"]) --> openCmd["/start-change name"]
+  start(["Idea"]) --> openCmd["/start-change description<br/>proposes title and slug"]
   suspended(["Suspended change<br/>STOPPED.md on disk"]) --> openCmd
   openCmd --> way{"fresh, or<br/>resuming?"}
   way -- resume --> resumept["read STOPPED.md,<br/>verify the head resolves,<br/>restate the next step"]
@@ -128,8 +128,13 @@ established as binding, because the flow was never explicitly opened.
 (Resuming a change a stop suspended is the same command; it is covered
 [below](#resuming-a-stopped-change).)
 
-`/start-change <name>` refuses without a name. Nothing is inferred: a flow that
-can open itself is the state the bracket exists to end.
+`/start-change <description>` takes a description of the work, not a name. From
+it the command proposes a session title and a kebab-case change slug, or matches
+the description to a change already open and resumes that one. Without a
+description it asks for one and opens nothing. Nothing is inferred from the
+conversation or the branch: a flow that can open itself is the state the bracket
+exists to end. The slug is a proposal until `propose` writes it, so the user can
+correct it before anything lands on disk.
 
 After the judgement is answered out loud, four checks decide whether the flow can
 open at all. Each is there because a later step would otherwise measure the wrong
@@ -139,7 +144,7 @@ thing, and none of them is a preference:
 |---|---|---|
 | a dirty tree | `git status --porcelain` | staging explicit paths — the rule only bites when there is unrelated work to sweep in |
 | a base that has moved | `git rev-list --count HEAD..origin/<base>` | the `scenarios` check, which would compare the delta against a spec the merge result does not have |
-| a name already in `changes/archive/` | `find openspec/changes -maxdepth 2 -type d -name '*<name>*'` | archive itself, whose folder is named after the change, so "was this applied?" stops being answerable by looking |
+| a slug already in `changes/archive/` (propose another) | `find openspec/changes -maxdepth 2 -type d -name '*<name>*'` | archive itself, whose folder is named after the change, so "was this applied?" stops being answerable by looking |
 | a second concurrent change | `find openspec/changes -mindepth 1 -maxdepth 1 -type d ! -name archive` | `/archive-on-green`'s name inference, and the two-state ambiguity the archive gate produced |
 
 A name found **outside** `changes/archive/` is a resume, not a refusal. The flow
@@ -306,9 +311,10 @@ closed, and the work can only be picked up where it was left.
 
 ## Resuming a stopped change
 
-`/start-change <name>` is also the resume, decided by what is on disk rather than
-by a flag: a change directory under `openspec/changes/<name>/` means resume, its
-absence means fresh.
+`/start-change <description>` is also the resume. A description that gives an
+open change's slug, or plainly describes its work, selects that change; then what
+is on disk decides, not a flag: a change directory under
+`openspec/changes/<name>/` means resume, its absence means fresh.
 
 - **"Does this deserve a change?" is not re-asked.** It was answered at the open.
   Re-asking it turns every interruption into a second gate, which is the

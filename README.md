@@ -24,7 +24,7 @@ built — with diagrams — are in [`docs/`](docs/README.md).
 
 **Commands**:
 
-- `/start-change` — open the flow, or resume one a stop suspended: does this deserve a change, is the tree clean, is the base current, is the name free
+- `/start-change <description>` — describe the work; it proposes a session title and a change slug, then opens the flow (or resumes one a stop suspended): does this deserve a change, is the tree clean, is the base current, is the slug free
 - `/archive-on-green` — pin the head SHA, confirm each check by name, archive, verify the apply
 - `/verify-green` — is this PR actually green, against its current head?
 - `/stop-change` — stop the flow: closed if the change reached its end, suspended with a recorded resume point if it did not; `--abandon` destroys it, code and all, after pinning the commits to a verified remote tag

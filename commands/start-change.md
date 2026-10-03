@@ -1,13 +1,48 @@
 ---
 name: start-change
-description: Open or resume the OpenSpec change flow for a named change — answer whether it deserves a change (or pick up a suspended one), verify the tree, base and name, then establish that the documented order binds until /stop-change.
+description: Open or resume the OpenSpec change flow from a description of the work — propose a session title and a change slug (or match a suspended change), answer whether it deserves a change, verify the tree, base and slug, then establish that the documented order binds until /stop-change.
+argument-hint: <description of the work>
 ---
 
-Open the flow for one named OpenSpec change. Take the name from the argument and
-**refuse without one**. Nothing is inferred here. A flow that can open itself is
-the state this command exists to end: a change used to begin because an agent
-started behaving as though one had begun, which left no moment at which the
-order of the steps was established as binding.
+Open the flow for one OpenSpec change, from a **description** of the work the
+user gives as the argument. The user does not name the change: naming it is this
+command's first job.
+
+If there is no argument, ask the user to describe the work, and stop there. A
+missing description is not a reason to infer one from the conversation, the
+branch name or the last thing worked on. A flow that can open itself is the state
+this command exists to end: a change used to begin because an agent started
+behaving as though one had begun, which left no moment at which the order of the
+steps was established as binding. The description is that moment.
+
+**0. Propose a session title and a change slug.**
+
+From the description, propose two names and print both:
+
+- **Session title** — a short human phrase, at most about six words, sentence
+  case, for the session this work runs in (for example *Cache widget lookups*).
+  Set it as the session title if the harness offers a way to; otherwise print it
+  so the user can rename the session.
+- **Change slug** — the OpenSpec change name: kebab-case, verb-led, at most about
+  five words, no date (`openspec archive` adds one), for example
+  `add-widget-caching`. This is `<name>` in every command below and in
+  `/stop-change` and `/archive-on-green`.
+
+Before minting a new slug, look for a change the description already describes:
+
+```bash
+find openspec/changes -mindepth 1 -maxdepth 1 -type d ! -name archive
+```
+
+Read the `proposal.md` of each one listed. If the description is the slug of one
+of them, or plainly describes the same work, that is a **resume** and its
+existing slug is used. If it might be, say which change it might be and ask. Do
+not guess either way: a wrong resume reopens someone else's work, and a wrong
+fresh start puts two proposals on one piece of work.
+
+The slug is proposed, not committed to. Nothing is written under it until
+`propose`, so a correction from the user before then replaces it, and step 4 is
+run again against the new slug.
 
 Two ways in, decided by what is on disk rather than by a flag:
 
@@ -97,15 +132,18 @@ spec nobody will ship: the check runs, passes, and measures the wrong thing.
 That is the first kind of empty green in `openspec-evidence`, one layer up —
 the comparison happened, against the wrong side.
 
-**4. Refuse a name that has already been through the flow.**
+**4. Never use a slug that has already been through the flow.**
 
 ```bash
 find openspec/changes -maxdepth 2 -type d -name '*<name>*'
 ```
 
-A hit under `openspec/changes/archive/` is a refusal: `openspec archive` names
-the archived folder after the change, so a reused name makes the archive
-ambiguous, and "was this applied?" can no longer be answered by looking.
+A hit under `openspec/changes/archive/` rules the slug out: `openspec archive`
+names the archived folder after the change, so a reused name makes the archive
+ambiguous, and "was this applied?" can no longer be answered by looking. Since
+the slug is proposed here rather than given, the answer is a different slug, not
+a refused flow: propose one that says how this work differs from the archived
+change, and run the search again.
 
 A hit directly under `openspec/changes/` is **not** a refusal — it is the resume
 above. What it *is* refused as is a **fresh** start: never propose over a change
@@ -131,9 +169,9 @@ right call — but reported either way, and the override is recorded in step 6.
 
 **6. Record the opening.**
 
-Report the change name, whether this was a fresh open or a resume (and for a
-resume, the recorded reason and next step), the branch, the base and its SHA, and
-which checks passed, naming any that were overridden. Then state the order that
+Report the session title and the change slug, whether this was a fresh open or
+a resume (and for a resume, the recorded reason and next step), the branch, the
+base and its SHA, and which checks passed, naming any that were overridden. Then state the order that
 now binds until `/stop-change`:
 
 ```

@@ -160,20 +160,20 @@ else
   observe fail 'after merging the base the behind-count should be 0'
 fi
 
-# --- 3. a name that already went through the flow ---------------------------
+# --- 3. a slug that already went through the flow ---------------------------
 
 R=$(new_repo namecollision)
 archived "$R" '2026-01-02-widget-caching'
 if [ -n "$(detect_name "$R" 'widget-caching')" ]; then
-  observe ok 'start refuses a reused name: the find hits the archived folder'
+  observe ok 'start rules out a reused slug: the find hits the archived folder'
 else
-  observe fail 'start should refuse a name already in changes/archive, but the find hit nothing'
+  observe fail 'start should rule out a slug already in changes/archive, but the find hit nothing'
 fi
 
 if [ -z "$(detect_name "$R" 'widget-pagination')" ]; then
-  observe ok 'start permits an unused name in the same repository'
+  observe ok 'start permits an unused slug in the same repository'
 else
-  observe fail "an unused name should hit nothing; the find printed: $(detect_name "$R" 'widget-pagination')"
+  observe fail "an unused slug should hit nothing; the find printed: $(detect_name "$R" 'widget-pagination')"
 fi
 
 # The third state this check has to tell apart, and the one that must NOT be a
