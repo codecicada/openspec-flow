@@ -30,6 +30,15 @@
 # Run it from anywhere: sh scripts/check-specs/smoke-bin.sh
 set -eu
 
+# `npm run test:bin` exports the caller's npm config into this shell as
+# npm_config_* variables, and the nested `npm install` calls below read them
+# back as command-line flags. npm 11 refuses `--allow-scripts` on a
+# project-scoped install with EALLOWSCRIPTS, so an `allow-scripts` entry in the
+# caller's ~/.npmrc failed the install here although running this script with
+# plain `sh` passed. Dropping the inherited variable lets those installs read
+# the same setting from ~/.npmrc, where npm accepts it.
+unset npm_config_allow_scripts NPM_CONFIG_ALLOW_SCRIPTS
+
 # Pinned, not floating. This is the only network dependency in the whole
 # repository and an upstream release must not be able to redden a build that
 # changed nothing here. Note the scope: the unscoped `openspec` on npm is an
