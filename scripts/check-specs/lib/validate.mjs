@@ -20,8 +20,15 @@
 
 import { createFailure } from './report.mjs';
 
-/** Lines openspec prints for a failing item, e.g. `✗ spec/frontend-styling`. */
-const FAILING_ITEM = /^\s*[✗×x]\s+(?:spec\/)?(\S+)/;
+/**
+ * Lines openspec prints for a failing item, e.g. `✗ spec/frontend-styling`.
+ *
+ * Anchored at column zero and requiring the `spec/` or `change/` prefix:
+ * openspec prints each issue indented beneath its item with the same marker
+ * (`  ✗ [ERROR] file: Spec must have a Purpose section...`), and counting those
+ * would name `[ERROR]` as a spec and double the failure count.
+ */
+const FAILING_ITEM = /^[✗×x]\s+(spec|change)\/(\S+)/;
 
 /** The totals line, e.g. `Totals: 17 passed, 1 failed (18 items)`. */
 const TOTALS = /Totals:\s*(\d+)\s+passed,\s*(\d+)\s+failed/;
@@ -47,7 +54,7 @@ export function checkStrictValidation({ run } = {}) {
   for (const line of lines) {
     const match = line.match(FAILING_ITEM);
     if (match) {
-      failingItems.push(match[1]);
+      failingItems.push({ type: match[1], name: match[2] });
     }
   }
 
@@ -73,10 +80,10 @@ export function checkStrictValidation({ run } = {}) {
     ];
   }
 
-  return failingItems.map((item) =>
+  return failingItems.map(({ type, name }) =>
     createFailure(
-      `${item}: fails openspec validate --specs --strict`,
-      `run \`openspec validate ${item} --type spec\` and fix what it reports`,
+      `${name}: fails openspec validate --specs --strict`,
+      `run \`openspec validate ${name} --type ${type}\` and fix what it reports`,
     ),
   );
 }
