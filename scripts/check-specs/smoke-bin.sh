@@ -86,8 +86,13 @@ cat >"$WORK/consumer/package.json" <<'JSON'
 }
 JSON
 
+# Both installs log at `error`, not `--silent`: `--silent` also drops npm's
+# error output, so a failed install ended the run with exit 1 and nothing after
+# the "# installing" line to say why. npm writes its errors to stderr, which
+# stays visible; stdout only carries the "added N packages" summary, which is
+# dropped to keep a passing run as quiet as before.
 printf '# installing the tarball into a fresh consumer\n'
-(cd "$WORK/consumer" && npm install --silent --no-audit --no-fund "$TARBALL")
+(cd "$WORK/consumer" && npm install --loglevel=error --no-audit --no-fund "$TARBALL" >/dev/null)
 
 if [ ! -L "$BIN" ]; then
   # Not a symlink means npm changed how it installs a bin, and this script is
@@ -199,7 +204,7 @@ else
 fi
 
 printf '# installing %s into the consumer\n' "$OPENSPEC_VERSION"
-(cd "$WORK/consumer" && npm install --silent --no-audit --no-fund "$OPENSPEC_VERSION")
+(cd "$WORK/consumer" && npm install --loglevel=error --no-audit --no-fund "$OPENSPEC_VERSION" >/dev/null)
 
 # --- C: the seeded fault is caught, and named ---------------------------------
 #
