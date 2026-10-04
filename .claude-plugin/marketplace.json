@@ -3,8 +3,8 @@
   "name": "openspec-flow",
   "description": "The openspec-flow plugin, served from its own repository so a consumer can enable it from .claude/settings.json.",
   "owner": {
-    "name": "Yannick Lescure",
-    "url": "https://github.com/yannicklescure"
+    "name": "codecicada",
+    "url": "https://github.com/codecicada"
   },
   "plugins": [
     {

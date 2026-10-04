@@ -67,7 +67,7 @@ everyone who opens the consumer repository by committing this to its
     "openspec-flow": {
       "source": {
         "source": "github",
-        "repo": "yannicklescure/openspec-flow",
+        "repo": "codecicada/openspec-flow",
         "ref": "v0.3.0"
       }
     }
@@ -84,7 +84,7 @@ Claude Code offers to install the marketplace and the plugin the first time the
 repository is trusted. For one machine only, without touching the repository:
 
 ```bash
-claude plugin marketplace add yannicklescure/openspec-flow
+claude plugin marketplace add codecicada/openspec-flow
 claude plugin install openspec-flow@openspec-flow
 ```
 
