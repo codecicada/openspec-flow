@@ -169,7 +169,9 @@ branch, and one nobody has touched in a month.
 
 The one thing a stop refuses is a **clean close over the inversion**: a merged
 pull request whose delta is still unapplied is reported as the defect it is, with
-"archive now" as the remedy, rather than recorded as tidy. An unarchived change
+"archive now" as the remedy, rather than recorded as tidy. Merged is read from
+the base tree, not from ancestry: the change directory in `origin/<base>`, live
+or archived, whatever the merge style. An unarchived change
 whose PR is still open is not refused — that is ordinary unfinished work, and
 stopping is allowed to leave work unfinished.
 

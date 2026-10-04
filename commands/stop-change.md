@@ -48,13 +48,24 @@ applied.**
 
 ```bash
 git fetch -q origin
-git merge-base --is-ancestor HEAD origin/<base> && \
-  find openspec/changes -mindepth 1 -maxdepth 1 -type d -name '<name>'
+git rev-parse --verify -q "origin/<base>^{commit}" >/dev/null || echo 'base unresolved'
+git ls-tree -d --name-only "origin/<base>" -- "openspec/changes/<name>"
 ```
 
-Both true is the **inversion**: the code shipped while the specification still
-describes it as proposed. Report it as a defect and say the remedy — archive now,
-in its own pull request — rather than recording a tidy close over it.
+`base unresolved` stops the stop: `ls-tree` on a missing ref prints nothing,
+which would read as "no inversion". Otherwise a printed path is the
+**inversion**: the base carries the change still proposed, so the code shipped
+while the specification still describes it as proposed.
+
+Report it as a defect and say the remedy — archive now, in its own pull request
+— rather than recording a tidy close over it.
+
+The check reads the base's tree, not `HEAD`'s ancestry, so it holds for a merge
+commit, a rebase merge and a squash merge alike. An ancestry check reads every
+rewritten merge as unmerged: after yannicklescure/openspec-flow#14 was
+rebase-merged, one said no while the pull request read `MERGED`. It also holds
+after the archive is committed on the branch: the inversion clears only when
+that archive reaches the base.
 
 This is the one refusal here with a receipt. In the session that produced this
 command, a change was merged first and archived afterwards, in a second pull
@@ -122,8 +133,17 @@ So the ordering is: **pin, verify the pin, then destroy.**
 
 ```bash
 git fetch -q origin
-git merge-base --is-ancestor HEAD origin/<base> && echo 'already merged'
+git rev-parse --verify -q "origin/<base>^{commit}" >/dev/null || echo 'base unresolved'
+git ls-tree -d --name-only "origin/<base>" -- "openspec/changes/<name>"
+git ls-tree -d --name-only "origin/<base>" -- openspec/changes/archive/ \
+  | grep -E "^openspec/changes/archive/[0-9]{4}-[0-9]{2}-[0-9]{2}-<name>\$"
 ```
+
+`base unresolved` stops the abandon, before anything is pinned or deleted. Any
+path printed after it means already merged: the change directory is in the
+base, live or archived, whatever the merge button did to the commits. A merge
+that was later reverted took the directory back out with the code, and reads as
+unmerged, which is correct: nothing of it is left in the base.
 
 Merged means this mode cannot do its job: the code is in the base, and deleting
 a branch does not remove it. Reverting shipped behaviour is a change of its own,

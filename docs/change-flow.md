@@ -308,6 +308,9 @@ stopping is allowed to leave work unfinished. The refusal is a clean close over
 the **inversion** — a merged pull request whose delta is still unapplied, which
 is live code the specification still calls a proposal. That state gets reported
 as the defect it is, with "archive now, in its own pull request" as the remedy.
+Merged is read from the base tree: the change directory still under
+`openspec/changes/<name>/` in `origin/<base>`. That holds for a merge commit, a
+rebase merge and a squash merge alike, where branch ancestry misses the last two.
 
 It is the one refusal here with a receipt. In the session that produced this
 command, a change was merged first and archived afterwards, in a second pull
@@ -410,7 +413,9 @@ What each step buys:
 
 Already-merged work cannot be abandoned at all: the code is in the base, and no
 branch delete removes it. Reverting shipped behaviour is a change of its own,
-with its own delta and its own review.
+with its own delta and its own review. Already merged means the change directory
+is in the base tree, live or archived, by any merge style. A merge that was
+reverted on the base reads as unmerged, because the directory left with the code.
 
 ## Deferring a change
 
