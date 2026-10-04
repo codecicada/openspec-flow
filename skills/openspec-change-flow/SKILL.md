@@ -103,6 +103,13 @@ which step, for each. A resume consumes its marker in the commit that resumes.
 From the open until the stop, the order below binds. It is not advice, and the
 archive is not optional afterwards.
 
+The open does not stop at stating the order: it enters the next step in the same
+turn. A fresh open enters explore with the description; explore writes no code
+and opens no change, and what it finds is the evidence `propose` starts from. A
+resume enters the next step `STOPPED.md` recorded, not explore, unless that step
+is explore. An order that only has to be read can be skipped by omission, which
+is how explore once went missing from the order `/start-change` stated.
+
 ## Archiving on green
 
 Archive when CI is green, without asking again. **Green means every required
@@ -155,12 +162,18 @@ the instruction is about intent, not timing.
 
 `/stop-change <name>` **just stops**. It does not judge whether the change is
 finished and never archives, merges or implements anything to make it look
-finished. Two outcomes, decided by the state it finds:
+finished. Three outcomes, decided by the state it finds:
 
 - **Closed** — archived and merged. Nothing to resume, no marker written.
 - **Suspended** — anything else. The resume point is written to
   `openspec/changes/<name>/STOPPED.md` (reason, head SHA, branch, PR, next step),
   committed and pushed, and `/start-change <name>` picks it up later.
+- **Deferred** — stopped before `propose`, so there is no
+  `openspec/changes/<name>/` for a marker to live in. No `STOPPED.md` is
+  written; the stop offers to record the exploration as `todo/<name>.md` (see
+  "Deferring a change") and writes it only on a yes. On a no, nothing on disk
+  records the work. A change directory explore created on the user's
+  confirmation is not this case: it is suspended like any other.
 
 A marker rather than an inference, for the reason the checker uses markers at
 all: intent is declared, never guessed. "A change directory with no session open"
