@@ -1,6 +1,6 @@
 ---
 name: start-change
-description: Open or resume the OpenSpec change flow from a description of the work — propose a session title and a change slug (or match a suspended change), answer whether it deserves a change, verify the tree, base and slug, then establish that the documented order binds until /stop-change.
+description: Open or resume the OpenSpec change flow from a description of the work — propose a session title and a change slug (or match a suspended change or a deferred plan in todo/), answer whether it deserves a change, verify the tree, base and slug, then establish that the documented order binds until /stop-change.
 argument-hint: <description of the work>
 ---
 
@@ -8,7 +8,9 @@ Open the flow for one OpenSpec change, from a **description** of the work the
 user gives as the argument. The user does not name the change: naming it is this
 command's first job.
 
-If there is no argument, ask the user to describe the work, and stop there. A
+If there is no argument, ask the user to describe the work, and stop there.
+Show the rerun as inline code, never in a shell fence: see "Suggesting a slash
+command" in `openspec-change-flow`. A
 missing description is not a reason to infer one from the conversation, the
 branch name or the last thing worked on. A flow that can open itself is the state
 this command exists to end: a change used to begin because an agent started
@@ -39,6 +41,22 @@ of them, or plainly describes the same work, that is a **resume** and its
 existing slug is used. If it might be, say which change it might be and ask. Do
 not guess either way: a wrong resume reopens someone else's work, and a wrong
 fresh start puts two proposals on one piece of work.
+
+Then look for a plan that a deferred change left:
+
+```bash
+find todo -maxdepth 1 -type f -name '*.md' 2>/dev/null || :
+```
+
+Read each plan's frontmatter and `Why`. The same rule applies. If the
+description is a plan's slug, or plainly describes the same work, use that
+plan's slug: `/archive-on-green` finds the plan by it and deletes it. If it might
+be, name the candidate plans and ask. An active change that matches wins over a
+plan that matches: that work is already proposed.
+
+A picked-up plan **seeds `propose`**: its Why, What and Open questions are where
+the proposal starts. It answers nothing in step 1. A plan records that someone
+once thought the work deserved a change; step 1 asks whether it still does.
 
 The slug is proposed, not committed to. Nothing is written under it until
 `propose`, so a correction from the user before then replaces it, and step 4 is
@@ -124,6 +142,7 @@ git rev-list --count HEAD..origin/<base>
 ```
 
 A non-zero count means the branch is behind. Merge the base first, then reopen.
+Give the user the rerun as inline code (see "Suggesting a slash command").
 
 Earns its place because delta specs are written against the live specs *as they
 are on disk*. If the base has moved, the delta describes a requirement the merge
@@ -143,7 +162,8 @@ names the archived folder after the change, so a reused name makes the archive
 ambiguous, and "was this applied?" can no longer be answered by looking. Since
 the slug is proposed here rather than given, the answer is a different slug, not
 a refused flow: propose one that says how this work differs from the archived
-change, and run the search again.
+change, and run the search again. A freshly minted slug that names
+`todo/<slug>.md` for different work is ruled out the same way.
 
 A hit directly under `openspec/changes/` is **not** a refusal — it is the resume
 above. What it *is* refused as is a **fresh** start: never propose over a change
@@ -169,8 +189,9 @@ right call — but reported either way, and the override is recorded in step 6.
 
 **6. Record the opening.**
 
-Report the session title and the change slug, whether this was a fresh open or
-a resume (and for a resume, the recorded reason and next step), the branch, the
+Report the session title and the change slug, the plan used as the seed
+(`todo/<slug>.md`, or none), whether this was a fresh open or a resume (and for
+a resume, the recorded reason and next step), the branch, the
 base and its SHA, and which checks passed, naming any that were overridden. Then state the order that
 now binds until `/stop-change`:
 

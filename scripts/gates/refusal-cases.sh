@@ -1,5 +1,6 @@
 #!/bin/sh
-# Watches the `/start-change` and `/stop-change` gates refuse.
+# Watches the `/start-change` and `/stop-change` gates refuse, and the
+# detections the deferred-plan steps rest on.
 #
 # Why this script exists
 # ----------------------
@@ -118,6 +119,29 @@ detect_merged() { git -C "$1" merge-base --is-ancestor HEAD "origin/$BASE"; }
 detect_pin() { git -C "$1" ls-remote --tags origin "refs/tags/abandoned/$2"; }
 detect_marker() { [ -f "$1/openspec/changes/$2/STOPPED.md" ] && cat "$1/openspec/changes/$2/STOPPED.md"; }
 detect_reachable() { git -C "$1" cat-file -e "$2^{commit}" 2>/dev/null; }
+detect_plan() { [ -f "$1/todo/$2.md" ]; }
+detect_plans() { (cd "$1" && find todo -maxdepth 1 -type f -name '*.md' 2>/dev/null || :); }
+remove_plan() { git -C "$1" rm -q --ignore-unmatch -- "todo/$2.md"; }
+
+# A slash command on any line of a shell-tagged fence. The desktop app puts a
+# Run button on those, and a slash command run in a shell fails there
+# (`zsh: no such file or directory: /openspec-flow:start-change`). `/usr/bin/x`
+# is a path, not a command: the name must end at a space or the line end.
+SCAN_SLASH='
+    FNR == 1 { shell = 0 }
+    /^[ \t]*```[ \t]*(bash|sh|zsh|shell|console)[ \t]*$/ { shell = 1; next }
+    /^[ \t]*```/ { shell = 0; next }
+    shell && /^[ \t]*\/[A-Za-z][A-Za-z0-9:_-]*([ \t]|$)/ { print FILENAME ":" FNR ": " $0 }
+'
+scan_slash() { awk "$SCAN_SLASH" "$@"; }
+
+# Commits a plan file the way the skill says to: by explicit path.
+defer() {
+  mkdir -p "$1/todo"
+  printf -- '---\nslug: %s\ntitle: A deferred change\n---\n\n## Why\n\n## What\n\n## Open questions\n' "$2" >"$1/todo/$2.md"
+  git -C "$1" add -- "todo/$2.md"
+  git -C "$1" commit -qm "chore(todo): defer $2" -- "todo/$2.md"
+}
 
 printf '\n# /start-change\n\n'
 
@@ -214,6 +238,26 @@ if [ -z "$(detect_open "$R")" ]; then
   observe ok 'start permits the first change: with none active the search prints nothing'
 else
   observe fail "with no active change the search should print nothing; got: $(detect_open "$R")"
+fi
+
+# --- 4a. a plan the description may match --------------------------------
+#
+# Step 0 lists `todo/*.md` beside the active changes. It has to print the plan
+# when there is one, and print nothing, without failing, when there is no
+# `todo/` at all: most repositories never have one.
+
+R=$(new_repo pickup)
+if [ -z "$(detect_plans "$R")" ]; then
+  observe ok 'start finds no plan in a repository without todo/, and does not fail'
+else
+  observe fail "with no todo/ the plan search should print nothing; got: $(detect_plans "$R")"
+fi
+
+defer "$R" 'add-widget-caching'
+if [ "$(detect_plans "$R")" = 'todo/add-widget-caching.md' ]; then
+  observe ok 'start lists a committed plan as a pickup candidate'
+else
+  observe fail "the plan search should list todo/add-widget-caching.md; got: $(detect_plans "$R")"
 fi
 
 printf '\n# /stop-change\n\n'
@@ -412,9 +456,83 @@ else
   observe fail 'merged work should read as an ancestor of the base, but the check said no'
 fi
 
+printf '\n# deferred plans\n\n'
+
+# --- 8. a plan is found by its slug, and only by its slug -------------------
+
+R=$(new_repo plan)
+defer "$R" 'add-widget-caching'
+if detect_plan "$R" 'add-widget-caching'; then
+  observe ok 'a deferred change is on disk at todo/<slug>.md'
+else
+  observe fail 'todo/add-widget-caching.md should exist after the plan is committed'
+fi
+
+if detect_plan "$R" 'widget-caching'; then
+  observe fail 'a plan must be found by its exact slug, not by a fragment of it'
+else
+  observe ok 'a different slug finds no plan: the match is exact'
+fi
+
+if [ -z "$(detect_open "$R")" ]; then
+  observe ok 'a plan is not a proposal: nothing appears under openspec/changes/'
+else
+  observe fail "writing a plan should create no change folder; got: $(detect_open "$R")"
+fi
+
+# --- 9. the archive commit removes the plan, or proceeds without one --------
+
+R=$(new_repo unplan)
+defer "$R" 'add-widget-caching'
+remove_plan "$R" 'add-widget-caching'
+if [ "$(git -C "$R" diff --cached --name-only)" = 'todo/add-widget-caching.md' ]; then
+  observe ok 'archive stages the plan deletion for its own commit'
+else
+  observe fail "archive should stage todo/add-widget-caching.md; staged: $(git -C "$R" diff --cached --name-only)"
+fi
+
+R=$(new_repo noplan)
+if remove_plan "$R" 'add-widget-caching' && [ -z "$(git -C "$R" diff --cached --name-only)" ]; then
+  observe ok 'archive of a change with no plan exits 0 and stages nothing'
+else
+  observe fail 'with no plan, the removal should exit 0 and stage nothing'
+fi
+
+printf '\n# suggested slash commands\n\n'
+
+# --- 10. a slash command never sits in a shell fence ------------------------
+#
+# Both directions on throwaway files first, so a scan that prints nothing for
+# the repository means "clean" and not "cannot see".
+
+R=$(new_repo fences)
+printf '```bash\n/start-change add-widget-caching\n```\n' >"$R/bad.md"
+printf '```\n/start-change add-widget-caching\n```\n\n```bash\n/usr/bin/env git status\n```\n' >"$R/good.md"
+if [ -n "$(scan_slash "$R/bad.md")" ]; then
+  observe ok 'the scan reports a slash command in a bash fence'
+else
+  observe fail 'a slash command in a bash fence should be reported, but the scan printed nothing'
+fi
+
+if [ -z "$(scan_slash "$R/good.md")" ]; then
+  observe ok 'the scan permits an untagged fence and a path in a bash fence'
+else
+  observe fail "an untagged fence and a path should pass; got: $(scan_slash "$R/good.md")"
+fi
+
+REPO=$(cd "$(dirname "$0")/../.." && pwd)
+# `-exec ... +` rather than a word-split list: the checkout path may hold spaces.
+HITS=$(find "$REPO/README.md" "$REPO/commands" "$REPO/skills" "$REPO/docs" \
+  -type f -name '*.md' -exec awk "$SCAN_SLASH" {} +)
+if [ -z "$HITS" ]; then
+  observe ok 'this repository suggests no slash command in a shell fence'
+else
+  observe fail "slash commands in shell fences: $HITS"
+fi
+
 # --- what this harness does not demonstrate ---------------------------------
 #
-# Stated in the run itself, not only in the docs, so nobody reads 16 passing
+# Stated in the run itself, not only in the docs, so nobody reads the passing
 # observations as "the gates are verified".
 
 cat <<'NOTE'
@@ -429,6 +547,8 @@ cat <<'NOTE'
 #     the refusal above it — already-merged work cannot be abandoned — is what
 #     this harness covers instead.
 #   - that an agent obeys a refusal. Observability is necessary, not sufficient.
+#   - that an agent writes a plan at the right moment. "This should be its own
+#     change" is a judgement, and no command observes it being made.
 NOTE
 
 printf '\n'

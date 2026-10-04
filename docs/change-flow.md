@@ -136,6 +136,11 @@ conversation or the branch: a flow that can open itself is the state the bracket
 exists to end. The slug is a proposal until `propose` writes it, so the user can
 correct it before anything lands on disk.
 
+The description is also matched against `todo/*.md`, the plans that deferred
+changes left (see [Deferring a change](#deferring-a-change)). A match gives the
+plan's slug and seeds `propose`. It does not answer the judgement below: a plan
+says the work once deserved a change, and the open asks whether it still does.
+
 After the judgement is answered out loud, four checks decide whether the flow can
 open at all. Each is there because a later step would otherwise measure the wrong
 thing, and none of them is a preference:
@@ -230,7 +235,7 @@ flowchart TD
   a4 --> a5["5. Verify the apply<br/>against the snapshot"]
   a5 --> a5q{"all hold?"}
   a5q -- no --> stopC(["Stop: report the difference"])
-  a5q -- yes --> a6["6. Commit with explicit paths"]
+  a5q -- yes --> a6["6. Commit with explicit paths<br/>including todo/name.md if removed"]
   a6 --> a7(["7. Stop before merge<br/>merge is the human gate"])
 ```
 
@@ -248,6 +253,10 @@ After `openspec archive`, check that:
   expected one.
 - the project's own `check-specs` run passes.
 
+The archive commit also removes the plan the change started from, with
+`git rm -q --ignore-unmatch -- todo/<name>.md`. It exits 0 when there is no plan,
+so a change that never had one needs no special case.
+
 Then commit the archive and let CI run again. That second CI cycle verifies the
 only thing the archive commit changed.
 
@@ -256,6 +265,13 @@ only thing the archive commit changed.
 Never `git add <dir>`. A directory add sweeps in unrelated in-flight change
 folders. This happened once, and was caught only by reading the commit's file
 list afterwards.
+
+### Suggest slash commands as inline code
+
+When a step tells the user to run a slash command, show it as inline code or in
+an untagged fence, never in a `bash` fence. A shell-tagged block gets a Run
+button, and a slash command run in a shell only fails. The skill's "Suggesting a
+slash command" section has the incident, and the gates harness scans for it.
 
 ## Merge
 
@@ -389,10 +405,35 @@ What each step buys:
   delta to `openspec/specs/`, publishing an accepted requirement for a change
   nobody accepted — and a spec describing behaviour no code implements passes
   every check in this package, because none of them read application code.
+- **The plan is left alone.** If the change started from `todo/<name>.md`, that
+  plan was on the base before the open, and abandon restores "never opened".
 
 Already-merged work cannot be abandoned at all: the code is in the base, and no
 branch delete removes it. Reverting shipped behaviour is a change of its own,
 with its own delta and its own review.
+
+## Deferring a change
+
+A change an agent recommends for later, instead of doing now, is written to
+`todo/<slug>.md` at the repository root. A follow-up proposed only in the
+transcript dies with the session. The skill's "Deferring a change" section has
+the format and the threshold: a recommendation, not a passing mention.
+
+A plan is a seed, not a proposal. It creates nothing under `openspec/changes/`,
+so it never counts as a second active change. It is committed by explicit path
+(`chore(todo): defer <slug>`), so it survives a machine change and blocks no
+later open with a dirty tree.
+
+Its whole life is three commands:
+
+| step | what happens to `todo/<slug>.md` |
+|---|---|
+| an agent defers a change | written and committed |
+| `/start-change` matches it | its slug becomes the change slug; it seeds `propose` |
+| `/archive-on-green` | removed in the archive commit |
+
+`/stop-change --abandon` leaves it alone. The plan existed before the change was
+opened, and abandon restores "never opened".
 
 ## How the brackets were watched refusing
 
@@ -443,6 +484,7 @@ sufficient.
 ```mermaid
 stateDiagram-v2
   [*] --> Open: /start-change
+  [*] --> Deferred: agent defers a change
   Open --> Proposed: propose
   Suspended --> Open: /start-change (resume)
   Proposed --> Applied: apply
@@ -459,8 +501,14 @@ stateDiagram-v2
   Proposed --> Destroyed: /stop-change --abandon
   InReview --> Destroyed: /stop-change --abandon
   Suspended --> Destroyed: /stop-change --abandon
+  Deferred --> Open: /start-change (pickup)
   Closed --> [*]
   Destroyed --> [*]
+
+  note right of Deferred
+    todo/slug.md on the base
+    removed by the archive commit
+  end note
 
   note right of Proposed
     openspec/changes/name/
