@@ -22,12 +22,14 @@ built — with diagrams — are in [`docs/`](docs/README.md).
 | `openspec-spec-drift` | what a `MODIFIED` delta silently deletes, both marker placement rules and why they are opposites, the doc-vs-spec asymmetry |
 | `openspec-evidence` | watch a check fail before trusting it; three ways a green check means nothing |
 
-**Commands**:
+**Commands** — the procedures:
 
-- `/start-change <description>` — describe the work; it proposes a session title and a change slug, then opens the flow (or resumes one a stop suspended): does this deserve a change, is the tree clean, is the base current, is the slug free
-- `/archive-on-green` — pin the head SHA, confirm each check by name, archive, verify the apply
-- `/verify-green` — is this PR actually green, against its current head?
-- `/stop-change` — stop the flow: closed if the change reached its end, suspended with a recorded resume point if it did not; `--abandon` destroys it, code and all, after pinning the commits to a verified remote tag
+| command | does |
+|---|---|
+| `/start-change <description>` | describe the work; it proposes a session title and a change slug, then opens the flow (or resumes one a stop suspended): does this deserve a change, is the tree clean, is the base current, is the slug free |
+| `/archive-on-green` | pin the head SHA, confirm each check by name, archive, verify the apply |
+| `/verify-green` | is this PR actually green, against its current head? |
+| `/stop-change` | stop the flow: closed if the change reached its end, suspended with a recorded resume point if it did not; `--abandon` destroys it, code and all, after pinning the commits to a verified remote tag |
 
 `/start-change` and `/stop-change` bracket the flow, and the brackets nest in
 time rather than only once per change: a stop suspends, writing the resume point
