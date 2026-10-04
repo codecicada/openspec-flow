@@ -68,7 +68,7 @@ everyone who opens the consumer repository by committing this to its
       "source": {
         "source": "github",
         "repo": "codecicada/openspec-flow",
-        "ref": "v0.3.0"
+        "ref": "v0.4.0"
       }
     }
   },
