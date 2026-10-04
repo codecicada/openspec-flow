@@ -18,7 +18,7 @@ built — with diagrams — are in [`docs/`](docs/README.md).
 
 | skill | covers |
 |---|---|
-| `openspec-change-flow` | the sequence, why one gate inside the brackets, archive-on-verified-green, the `gh pr checks --watch` false green, post-archive verification |
+| `openspec-change-flow` | the sequence, why one gate inside the brackets, archive-on-verified-green, the `gh pr checks --watch` false green, post-archive verification, deferring a change to `todo/` |
 | `openspec-spec-drift` | what a `MODIFIED` delta silently deletes, both marker placement rules and why they are opposites, the doc-vs-spec asymmetry |
 | `openspec-evidence` | watch a check fail before trusting it; three ways a green check means nothing |
 
@@ -37,6 +37,11 @@ brackets. Why that is not a contradiction of "one gate" is argued in the
 `openspec-change-flow` skill — the metric was never the number of stops but
 whether a decision lives at each one, and "does this deserve a change?" was the
 decision the old flow left ungated.
+
+A change proposed for later is not left in the transcript. The agent writes it
+to `todo/<slug>.md` and commits it. A later `/start-change` that matches it uses
+its slug and seeds the proposal from it, and `/archive-on-green` deletes it in
+the archive commit.
 
 **Checker** — `scripts/check-specs`, four checks over `openspec/`:
 

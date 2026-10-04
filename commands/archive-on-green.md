@@ -38,6 +38,15 @@ once, and for a `skip_specs` change a checksum of the specs tree.
 openspec archive <name> --yes
 ```
 
+Then remove the plan the change started from, if there was one:
+
+```bash
+git rm -q --ignore-unmatch -- todo/<name>.md
+```
+
+It exits 0 whether or not `todo/<name>.md` exists, so a change that never had a
+plan needs no special case. Report which it was: plan removed, or no plan.
+
 **5. Verify the apply.**
 
 - the requirement is declared exactly once
@@ -47,6 +56,8 @@ openspec archive <name> --yes
 - the project's own spec checks pass
 
 **6. Commit with explicit paths.** Never `git add` a directory — it sweeps in
-unrelated in-flight change folders.
+unrelated in-flight change folders. The list includes `todo/<name>.md` when step
+4 removed it: the plan leaves the base in the same commit as the change it
+became.
 
 **7. Stop before merging.** Merge is the human gate; report and wait.

@@ -188,6 +188,12 @@ git rm -r openspec/changes/<name>
 git commit -m 'revert(openspec): abandon <name>'
 ```
 
+Leave `todo/<name>.md` alone. If the change started from a plan, the plan was on
+the base before the change was opened, and abandon restores "never opened". If
+the idea itself is dead, removing the plan is a separate commit someone decides
+on. A plan written *on* the abandoned branch, for some other later change, goes
+with the branch and survives at the tag.
+
 Never run `openspec archive` on an abandoned change. Archive applies the delta to
 `openspec/specs/`, publishing an accepted requirement for a change nobody
 accepted — and a spec describing behaviour no code implements passes every check

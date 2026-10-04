@@ -1,7 +1,7 @@
 ---
 name: openspec-change-flow
-description: The change flow for an OpenSpec repository — one human gate inside it, at merge, bracketed by an explicit start and stop. Use when running an OpenSpec change end to end — opening or resuming the flow, proposing, applying, opening a PR, watching CI, archiving, merging, stopping, suspending or abandoning — and whenever deciding whether a step needs the user's approval or whether CI green is the trigger.
-version: 0.2.0
+description: The change flow for an OpenSpec repository — one human gate inside it, at merge, bracketed by an explicit start and stop. Use when running an OpenSpec change end to end — opening or resuming the flow, proposing, applying, opening a PR, watching CI, archiving, merging, stopping, suspending or abandoning, or deferring a change for later — and whenever deciding whether a step needs the user's approval or whether CI green is the trigger.
+version: 0.3.0
 ---
 
 # The change flow
@@ -15,6 +15,9 @@ version: 0.2.0
 /stop-change <name>             <- stops the flow: closed if it reached its end,
                                    suspended (with a resume point) if it did not
 /stop-change <name> --abandon   <- destroys the change and its code
+
+todo/<slug>.md                  <- a change proposed for later; /start-change
+                                   picks it up, the archive deletes it
 ```
 
 **Merge is the only human gate *inside* the flow.** Between `/start-change` and
@@ -78,7 +81,9 @@ established as binding, because the flow was never explicitly opened.
 
 `/start-change <description>` — see the command for the full procedure. The
 user describes the work; the command proposes a session title and a kebab-case
-change slug from it, or matches the description to a change already open. Then
+change slug from it, or matches the description to a change already open or to
+a deferred plan in `todo/`. A matched plan gives its slug and seeds `propose`;
+it does not answer "does this deserve a change?". Then
 two ways in, decided by what is on disk rather than by a flag:
 
 - **Fresh** — nothing under `openspec/changes/<name>/`. "Does this deserve a
@@ -131,6 +136,10 @@ Verify the apply rather than trusting it:
   checksum, do not eyeball it
 - `openspec validate --specs --strict` passes, and the capability count is what
   you expected
+
+In the same archive commit, remove the plan the change started from:
+`git rm -q --ignore-unmatch -- todo/<name>.md`. It exits 0 when there is no plan,
+so a change that never had one needs no special case.
 
 Then commit the archive and let CI run again. That second cycle is the one that
 verifies the only thing the archive commit changed.
@@ -185,6 +194,9 @@ no remote, no pull request, no tag — so recovering it needed the machine it wa
 written on. The tag is why `git branch -D` and `git push origin --delete` are
 safe here; without it they produce exactly that state.
 
+Abandon leaves `todo/<name>.md` alone: the plan existed before the change was
+opened.
+
 Never `openspec archive` an abandoned change: archive applies the delta to
 `openspec/specs/`, publishing an accepted requirement for a change nobody
 accepted.
@@ -192,6 +204,85 @@ accepted.
 Already-merged work cannot be abandoned — deleting a branch does not remove code
 that is already in the base. Reverting shipped behaviour is a change of its own,
 with its own delta and its own review.
+
+## Deferring a change
+
+When you recommend a specific change for later instead of doing it now, write
+it down. A follow-up proposed only in the transcript dies with the session, and
+nothing on disk can pick it up. The threshold is a recommendation: "this should
+be its own change". A passing mention, a speculation or a list of ideas does not
+count, and writing a plan for each of those fills `todo/` with noise.
+
+The plan is `todo/<slug>.md` at the repository root. The slug follows the same
+rule as `/start-change`'s: kebab-case, verb-led, no date. The file name and the
+`slug` field are equal.
+
+```markdown
+---
+slug: add-widget-caching
+title: Cache widget lookups
+created: 2026-10-03
+source: <branch, change or session it came from>
+---
+
+## Why
+
+## What
+
+## Open questions
+```
+
+A plan is a **seed, not a proposal**. It creates nothing under
+`openspec/changes/`. A second active change would break `/start-change` step 5
+and the archive's single-change inference. "Does this deserve a change?" is
+still answered when the plan is picked up.
+
+Before writing, check the slug is free:
+
+```bash
+ls todo/<slug>.md 2>/dev/null
+find openspec/changes -maxdepth 2 -type d -name '*<slug>*'
+```
+
+- A plan already there **for the same work**: update it, do not write a second.
+- A plan already there for different work: choose another slug.
+- A hit under `openspec/changes/` or `changes/archive/`: choose another slug.
+
+Commit it by explicit path, then name the path to the user:
+
+```bash
+git add -- todo/<slug>.md
+git commit -m 'chore(todo): defer <slug>' -- todo/<slug>.md
+```
+
+Mid-change, the plan goes in that change's branch and reaches the base with its
+pull request. An uncommitted plan makes the tree dirty, and the next
+`/start-change` refuses it. Tell the user it is picked up with
+`/start-change <slug>`, as inline code (see the next section).
+
+`/start-change` matches a description against `todo/*.md` and uses the plan's
+slug, so `/archive-on-green` finds the plan by name and deletes it in the
+archive commit. `/stop-change --abandon` leaves it alone: the plan existed before
+the change was opened.
+
+## Suggesting a slash command
+
+When you tell the user to run a slash command, such as `/start-change <slug>`
+after a refusal or after writing a plan, write it as **inline code or in an
+untagged fence**. Never put it in a fence tagged `bash`, `sh`, `zsh`, `shell` or
+`console`. Shell commands (`git`, `gh`, `npm`) keep their `bash` fence; only
+slash commands are the problem.
+
+The desktop app adds a Run button to shell-tagged blocks. In one session
+`/start-change` refused, and the reply suggested the rerun in a `bash` fence.
+The user pressed Run and got `zsh: no such file or directory:
+/openspec-flow:start-change`. The agent then carried on as though the command
+had run, opening the flow without it, which is the exact state `/start-change`
+exists to end. So, second rule: a command the user tried that failed has not
+run. Wait for a real invocation.
+
+`scripts/gates/refusal-cases.sh` scans `commands/`, `skills/`, `docs/` and the
+README for a slash command inside a shell fence.
 
 ## Staging
 
