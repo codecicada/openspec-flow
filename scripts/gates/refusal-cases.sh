@@ -105,8 +105,46 @@ move_base() {
   git -C "$root/other" push -q origin "$BASE" 2>/dev/null
 }
 
-propose() { mkdir -p "$1/openspec/changes/$2/specs/widgets"; }
-archived() { mkdir -p "$1/openspec/changes/archive/$2/specs/widgets"; }
+# Each writes a file, not only a directory: git tracks files, and the merged
+# check looks the change directory up in the base's tree.
+propose() {
+  mkdir -p "$1/openspec/changes/$2/specs/widgets"
+  printf '# Proposal\n' >"$1/openspec/changes/$2/proposal.md"
+}
+archived() {
+  mkdir -p "$1/openspec/changes/archive/$2/specs/widgets"
+  printf '# Proposal\n' >"$1/openspec/changes/archive/$2/proposal.md"
+}
+
+# Merges origin/<branch> into origin/$BASE the way a pull request's merge
+# button does, from a second clone, then fetches in the working clone. The
+# style is `noff` (a merge commit), `rebase` (each commit replayed under a new
+# committer, so new SHAs) or `squash` (one commit, no link to the branch).
+merge_into_base() {
+  m="$(dirname "$1")/merger"
+  if [ -d "$m" ]; then
+    git -C "$m" fetch -q origin
+    git -C "$m" reset -q --hard "origin/$BASE"
+  else
+    git clone -q "$(dirname "$1")/origin.git" "$m"
+    git -C "$m" config user.email 'merger@example.invalid'
+    git -C "$m" config user.name 'Merge Button'
+  fi
+  case "$3" in
+    noff) git -C "$m" merge -q --no-ff -m 'Merge pull request #1' "origin/$2" ;;
+    rebase)
+      for c in $(git -C "$m" rev-list --reverse "$BASE..origin/$2"); do
+        git -C "$m" cherry-pick "$c" >/dev/null
+      done
+      ;;
+    squash)
+      git -C "$m" merge -q --squash "origin/$2" >/dev/null
+      git -C "$m" commit -qm 'Squash pull request #1'
+      ;;
+  esac
+  git -C "$m" push -q origin "$BASE" 2>/dev/null
+  git -C "$1" fetch -q origin
+}
 
 # The detection commands, written once so the harness cannot drift from the
 # command files by paraphrasing them differently in each case.
@@ -115,7 +153,24 @@ detect_behind() { git -C "$1" rev-list --count "HEAD..origin/$BASE"; }
 detect_name() { (cd "$1" && find openspec/changes -maxdepth 2 -type d -name "*$2*"); }
 detect_open() { (cd "$1" && find openspec/changes -mindepth 1 -maxdepth 1 -type d ! -name archive); }
 detect_others() { (cd "$1" && find openspec/changes -mindepth 1 -maxdepth 1 -type d ! -name archive ! -name "$2"); }
-detect_merged() { git -C "$1" merge-base --is-ancestor HEAD "origin/$BASE"; }
+# Merged is the change directory in the base's tree, live or archived, whatever
+# the merge button did to the commits. Exit 2 means origin/$BASE does not
+# resolve: `ls-tree` on a missing ref prints nothing, which must not read as
+# "unmerged".
+detect_base() { git -C "$1" rev-parse --verify -q "origin/$BASE^{commit}" >/dev/null; }
+detect_inversion() {
+  detect_base "$1" || return 2
+  [ -n "$(git -C "$1" ls-tree -d --name-only "origin/$BASE" -- "openspec/changes/$2")" ]
+}
+detect_merged() {
+  detect_base "$1" || return 2
+  detect_inversion "$1" "$2" ||
+    git -C "$1" ls-tree -d --name-only "origin/$BASE" -- openspec/changes/archive/ |
+    grep -qE "^openspec/changes/archive/[0-9]{4}-[0-9]{2}-[0-9]{2}-$2\$"
+}
+# Prints the exit code instead of acting on it, so a case can tell "unmerged"
+# (1) from "the base does not resolve" (2). Both are false to an `if`.
+merged_rc() { if detect_merged "$@"; then echo 0; else echo $?; fi; }
 detect_pin() { git -C "$1" ls-remote --tags origin "refs/tags/abandoned/$2"; }
 detect_marker() { [ -f "$1/openspec/changes/$2/STOPPED.md" ] && cat "$1/openspec/changes/$2/STOPPED.md"; }
 detect_reachable() { git -C "$1" cat-file -e "$2^{commit}" 2>/dev/null; }
@@ -269,13 +324,13 @@ printf '\n# /stop-change\n\n'
 # inversion that produced this command: merged first, archived after.
 
 R=$(new_repo stopping)
-propose "$R" '2026-01-05-widget-limits'
+propose "$R" 'widget-limits'
 git -C "$R" checkout -q -b feat/widget-limits
 printf 'limits\n' >>"$R/src/app.txt"
 git -C "$R" add -A && git -C "$R" commit -qm 'feat: widget limits'
 
 # Unmerged and unarchived: suspend, do not refuse.
-if ! detect_merged "$R" && [ -n "$(detect_open "$R")" ]; then
+if [ "$(merged_rc "$R" 'widget-limits')" = 1 ] && [ -n "$(detect_open "$R")" ]; then
   observe ok 'stop suspends unfinished work rather than refusing it: unmerged and unarchived'
 else
   observe fail 'an unmerged, unarchived change should be suspendable'
@@ -283,14 +338,14 @@ fi
 
 # The marker is what a resume reads, so its absence and its presence have to be
 # distinguishable before either side of the resume can be trusted.
-if [ -z "$(detect_marker "$R" '2026-01-05-widget-limits')" ]; then
+if [ -z "$(detect_marker "$R" 'widget-limits')" ]; then
   observe ok 'start sees no resume point before a stop has written one'
 else
   observe fail 'no STOPPED.md should exist before the stop runs'
 fi
 
 HEAD_SHA=$(git -C "$R" rev-parse HEAD)
-cat >"$R/openspec/changes/2026-01-05-widget-limits/STOPPED.md" <<EOF
+cat >"$R/openspec/changes/widget-limits/STOPPED.md" <<EOF
 # Stopped
 
 - **stopped**: 2026-01-05
@@ -300,8 +355,8 @@ cat >"$R/openspec/changes/2026-01-05-widget-limits/STOPPED.md" <<EOF
 - **pr**: none
 - **next step**: open a PR and watch CI
 EOF
-git -C "$R" add -A && git -C "$R" commit -qm 'chore(openspec): stop 2026-01-05-widget-limits'
-if detect_marker "$R" '2026-01-05-widget-limits' | grep -q '^- \*\*next step\*\*:'; then
+git -C "$R" add -A && git -C "$R" commit -qm 'chore(openspec): stop widget-limits'
+if detect_marker "$R" 'widget-limits' | grep -q '^- \*\*next step\*\*:'; then
   observe ok 'the suspended change carries a resume point naming the next step'
 else
   observe fail 'STOPPED.md should record the next step for the resume to restate'
@@ -324,9 +379,9 @@ fi
 
 # The marker is consumed by the resume. Left behind on a branch that is moving
 # again it says the opposite of the truth.
-git -C "$R" rm -q -- 'openspec/changes/2026-01-05-widget-limits/STOPPED.md'
-git -C "$R" commit -qm 'chore(openspec): resume 2026-01-05-widget-limits'
-if [ -z "$(detect_marker "$R" '2026-01-05-widget-limits')" ] && [ -n "$(detect_open "$R")" ]; then
+git -C "$R" rm -q -- 'openspec/changes/widget-limits/STOPPED.md'
+git -C "$R" commit -qm 'chore(openspec): resume widget-limits'
+if [ -z "$(detect_marker "$R" 'widget-limits')" ] && [ -n "$(detect_open "$R")" ]; then
   observe ok 'the resume consumes the marker and leaves the change itself in place'
 else
   observe fail 'after resuming, STOPPED.md should be gone and the change directory should remain'
@@ -334,25 +389,36 @@ fi
 
 # The defect: merged into the base while the delta is still unapplied.
 git -C "$R" push -q -u origin feat/widget-limits 2>/dev/null
-ROOT=$(dirname "$R")
-git clone -q "$ROOT/origin.git" "$ROOT/merger"
-git -C "$ROOT/merger" config user.email 'merger@example.invalid'
-git -C "$ROOT/merger" config user.name 'Merge Button'
-git -C "$ROOT/merger" merge -q --no-ff -m 'Merge pull request #1' origin/feat/widget-limits
-git -C "$ROOT/merger" push -q origin "$BASE" 2>/dev/null
-git -C "$R" fetch -q origin
-if detect_merged "$R" && [ -n "$(detect_open "$R")" ]; then
+merge_into_base "$R" feat/widget-limits noff
+if detect_inversion "$R" 'widget-limits'; then
   observe ok 'stop refuses a clean close over the inversion: merged, and the delta still unapplied'
 else
   observe fail 'merged-with-unapplied-delta should be detectable as the inversion'
 fi
 
-rm -rf "$R/openspec/changes/2026-01-05-widget-limits"
+rm -rf "$R/openspec/changes/widget-limits"
 archived "$R" '2026-01-05-widget-limits'
-if [ -z "$(detect_open "$R")" ] && [ -n "$(detect_name "$R" '2026-01-05-widget-limits')" ]; then
+git -C "$R" add -A && git -C "$R" commit -qm 'chore(openspec): archive widget-limits'
+if [ -z "$(detect_open "$R")" ] && [ -n "$(detect_name "$R" 'widget-limits')" ]; then
   observe ok 'stop closes for good once the change is merged and under changes/archive/'
 else
   observe fail 'after archiving, the change should be found under changes/archive/ and nowhere else'
+fi
+
+# The remedy committed is not the remedy merged. The inversion is a property of
+# the base, so an archive that exists only on the branch leaves it in place.
+if detect_inversion "$R" 'widget-limits'; then
+  observe ok 'stop still reports the inversion while the archive is only on the branch'
+else
+  observe fail 'an archive not yet in the base should not clear the inversion'
+fi
+
+git -C "$R" push -q origin feat/widget-limits 2>/dev/null
+merge_into_base "$R" feat/widget-limits noff
+if ! detect_inversion "$R" 'widget-limits' && detect_merged "$R" 'widget-limits'; then
+  observe ok 'stop closes once the base carries the change only under changes/archive/'
+else
+  observe fail 'with the archive merged, the base should carry the change as archived and not as live'
 fi
 
 # --- 6. abandoning work that is not pinned anywhere but this machine --------
@@ -434,26 +500,117 @@ fi
 
 R=$(new_repo alreadymerged)
 git -C "$R" checkout -q -b feat/shipped
+propose "$R" 'shipped'
 printf 'shipped\n' >>"$R/src/app.txt"
-git -C "$R" commit -qam 'feat: shipped behaviour'
+git -C "$R" add -A && git -C "$R" commit -qm 'feat: shipped behaviour'
 git -C "$R" push -q -u origin feat/shipped 2>/dev/null
-if detect_merged "$R"; then
+if [ "$(merged_rc "$R" shipped)" != 1 ]; then
   observe fail 'an unmerged branch must not read as merged into the base'
 else
-  observe ok 'abandon permits an unmerged branch: HEAD is not an ancestor of the base'
+  observe ok 'abandon permits an unmerged branch: the base tree has no shipped change directory'
 fi
 
-ROOT=$(dirname "$R")
-git clone -q "$ROOT/origin.git" "$ROOT/merger"
-git -C "$ROOT/merger" config user.email 'merger@example.invalid'
-git -C "$ROOT/merger" config user.name 'Merge Button'
-git -C "$ROOT/merger" merge -q --no-ff -m 'Merge pull request #1' origin/feat/shipped
-git -C "$ROOT/merger" push -q origin "$BASE" 2>/dev/null
-git -C "$R" fetch -q origin
-if detect_merged "$R"; then
-  observe ok 'abandon refuses work already merged into the base: HEAD is an ancestor of it'
+merge_into_base "$R" feat/shipped noff
+if detect_merged "$R" shipped; then
+  observe ok 'abandon refuses work already merged into the base: the base tree carries its change directory'
 else
-  observe fail 'merged work should read as an ancestor of the base, but the check said no'
+  observe fail 'merged work should be found in the base tree, but the check said no'
+fi
+
+# --- 7a. merged by any button, and only when it really is ---------------------
+#
+# A rebase merge replays the branch under new SHAs and a squash merge folds it
+# into one commit, so the branch head is never in the base's history even
+# though everything on it shipped. yannicklescure/openspec-flow#14 was
+# rebase-merged and an ancestry check said "not merged".
+
+# A pushed branch proposing change $2, with two commits so a squash is not the
+# same patch as either of them. Prints the working clone's path.
+shipping_branch() {
+  r=$(new_repo "$1")
+  git -C "$r" checkout -q -b "feat/$2"
+  propose "$r" "$2"
+  git -C "$r" add -A && git -C "$r" commit -qm "docs(openspec): propose $2"
+  printf 'limit: 10\n' >>"$r/src/app.txt"
+  git -C "$r" commit -qam "feat: $2"
+  git -C "$r" push -q -u origin "feat/$2" 2>/dev/null
+  printf '%s\n' "$r"
+}
+
+R=$(shipping_branch rebasemerged widget-quotas)
+merge_into_base "$R" feat/widget-quotas rebase
+if detect_merged "$R" widget-quotas; then
+  observe ok 'a rebase-merged change reads as merged'
+else
+  observe fail 'a rebase-merged change should read as merged, but the check said no'
+fi
+
+R=$(shipping_branch squashmerged widget-quotas)
+merge_into_base "$R" feat/widget-quotas squash
+if detect_merged "$R" widget-quotas; then
+  observe ok 'a squash-merged change reads as merged'
+else
+  observe fail 'a squash-merged change should read as merged, but the check said no'
+fi
+
+# Later work on the base rewrites the very line the change added. Any check that
+# compares content would now read "unmerged"; the change directory is untouched.
+M="$(dirname "$R")/merger"
+sed 's/^limit: 10$/limit: 20/' "$M/src/app.txt" >"$M/src/app.txt.new"
+mv "$M/src/app.txt.new" "$M/src/app.txt"
+git -C "$M" commit -qam 'feat: raise the widget quota'
+git -C "$M" push -q origin "$BASE" 2>/dev/null
+git -C "$R" fetch -q origin
+if detect_merged "$R" widget-quotas; then
+  observe ok 'a merged change still reads as merged after later base work edits its lines'
+else
+  observe fail 'later base work on the same lines should not make a merged change read as unmerged'
+fi
+
+# The branch moves after the merge, as it does when the archive is committed
+# late. Its head is now in no merge at all, and the change still shipped.
+R=$(shipping_branch movedafter widget-quotas)
+merge_into_base "$R" feat/widget-quotas rebase
+printf 'after\n' >>"$R/src/app.txt"
+git -C "$R" commit -qam 'fix: after the merge'
+if detect_merged "$R" widget-quotas; then
+  observe ok 'a merged change reads as merged after its branch gains a commit'
+else
+  observe fail 'a commit on the branch after the merge should not unmerge the change'
+fi
+
+# Unmerged while the base moves underneath: the other direction of every case
+# above, and the one an over-eager check would get wrong.
+R=$(shipping_branch basemoved widget-quotas)
+move_base "$R"
+git -C "$R" fetch -q origin
+if [ "$(merged_rc "$R" widget-quotas)" = 1 ]; then
+  observe ok 'abandon permits an unmerged change while other work lands on the base'
+else
+  observe fail 'an unmerged change should read as unmerged however far the base moves'
+fi
+
+# A reverted merge took the change directory back out with the code. The code
+# is no longer in the base, so abandon may proceed.
+R=$(shipping_branch reverted widget-quotas)
+merge_into_base "$R" feat/widget-quotas noff
+M="$(dirname "$R")/merger"
+git -C "$M" revert -m 1 --no-edit HEAD >/dev/null
+git -C "$M" push -q origin "$BASE" 2>/dev/null
+git -C "$R" fetch -q origin
+if [ "$(merged_rc "$R" widget-quotas)" = 1 ]; then
+  observe ok 'abandon permits a change whose merge was reverted on the base'
+else
+  observe fail 'a reverted merge should read as unmerged'
+fi
+
+# An unfetched or misspelled base. `ls-tree` on it prints nothing, which would
+# read as "unmerged" and permit abandoning shipped work.
+git -C "$R" update-ref -d "refs/remotes/origin/$BASE"
+if [ "$(merged_rc "$R" widget-quotas)" = 2 ]; then
+  observe ok 'the merged check stops on an unresolvable base rather than reading it as unmerged'
+else
+  observe fail "an unresolvable origin/$BASE should stop the check; got exit $(merged_rc "$R" widget-quotas)"
 fi
 
 printf '\n# deferred plans\n\n'
