@@ -17,7 +17,8 @@ flowchart TD
   deserve -- yes --> checks{"clean tree? base current?<br/>name free? no other change open?"}
   checks -- no --> refuse(["Refused: report it,<br/>the flow does not open"])
   checks -- yes --> opened[["FLOW OPEN<br/>the order below now binds"]]
-  opened --> explore["opsx explore"]
+  opened -- fresh --> explore["opsx explore<br/>entered at once, with the description"]
+  opened -- resume --> nextStep(["enter the recorded next step<br/>explore only if stopped before propose"])
   explore --> propose["propose<br/>proposal, design, tasks, delta specs"]
   propose --> apply["apply<br/>implement the tasks"]
   apply --> pr["open PR"]
@@ -135,6 +136,12 @@ description it asks for one and opens nothing. Nothing is inferred from the
 conversation or the branch: a flow that can open itself is the state the bracket
 exists to end. The slug is a proposal until `propose` writes it, so the user can
 correct it before anything lands on disk.
+
+The open ends by entering explore with the description, in the same turn, rather
+than by stating the order and waiting. Explore writes no code and opens no
+change; what it finds is the evidence `propose` starts from. A stated order that
+nothing enters can be skipped by omission, which is how explore once went missing
+from the order `/start-change` printed.
 
 The description is also matched against `todo/*.md`, the plans that deferred
 changes left (see [Deferring a change](#deferring-a-change)). A match gives the
@@ -284,7 +291,7 @@ timing.
 
 `/stop-change <name>` **just stops**. It does not judge whether the change is
 finished, and it never archives, merges or implements anything to make it look
-finished — a stop reports the state it finds. Two outcomes, decided by that
+finished — a stop reports the state it finds. Three outcomes, decided by that
 state:
 
 ```mermaid
@@ -294,12 +301,18 @@ flowchart TD
   s3 -- yes --> inv(["Refuse a clean close:<br/>report the inversion,<br/>archive now"])
   s3 -- no --> s4{"archived and merged?"}
   s4 -- yes --> done(["Closed: nothing to resume,<br/>no marker written"])
-  s4 -- no --> susp["Write STOPPED.md:<br/>reason, head SHA, branch,<br/>PR, next step"]
+  s4 -- no --> s5{"openspec/changes/name/<br/>on disk?"}
+  s5 -- yes --> susp["Write STOPPED.md:<br/>reason, head SHA, branch,<br/>PR, next step"]
   susp --> push(["Suspended: committed,<br/>pushed, resumable"])
+  s5 -- "no: stopped before propose" --> s6{"record the exploration<br/>as todo/name.md?"}
+  s6 -- yes --> plan(["Deferred: todo/name.md<br/>committed, pushed"])
+  s6 -- no --> nothing(["Nothing recorded:<br/>the next open is fresh"])
 
   classDef question fill:#e0e7ff,stroke:#4338ca,color:#1f2937;
   class s3 question;
   class s4 question;
+  class s5 question;
+  class s6 question;
 ```
 
 **What it refuses is narrow, and on purpose.** An unarchived change whose pull
@@ -343,6 +356,10 @@ is on disk decides, not a flag: a change directory under
 - **The marker is consumed by the resume that acts on it**, in the commit that
   resumes. A `STOPPED.md` left on a branch that is moving again says the opposite
   of the truth.
+- **The resume enters the recorded next step**, not explore. Explore has no
+  marker to resume from: a stop before `propose` leaves no change directory, so
+  it is deferred to a `todo/` plan or not recorded at all, and the next open is
+  fresh.
 - **The open-time checks still apply** — clean tree, current base, no *other*
   change open. The second-change search excludes the resumed change's own name,
   which is the one place the same command means something different on the two

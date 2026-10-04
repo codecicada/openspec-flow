@@ -68,6 +68,25 @@ unfinished. Only *merged* and unarchived is a defect.
 
 **4. Record the stop where the resume can find it.**
 
+For a stop **before `propose`** — no `openspec/changes/<name>/` on disk — there
+is no change for `STOPPED.md` to live in, and creating the directory to hold it
+would make an unproposed change read as proposed. Write no marker. Offer instead
+to record the exploration as a deferred plan, `todo/<name>.md`, in the shape
+`openspec-change-flow` gives under "Deferring a change": frontmatter `slug`,
+`title`, `created`, `source`, and `Why`, `What` and `Open questions` drawn from
+what explore found. Write it only on the user's yes:
+
+```bash
+git add -- todo/<name>.md
+git commit -m 'chore(todo): defer <name>' -- todo/<name>.md
+git push
+```
+
+On a no, write nothing and say so: nothing on disk records the work, and the
+next `/start-change` for it is a fresh open that answers the gate again. If
+explore already created `openspec/changes/<name>/` on the user's confirmation,
+this is not a stop before `propose`: take the `STOPPED.md` path below.
+
 For a change that reached its end — archived, merged — there is nothing to
 resume. Report the close and stop. No marker is written, because a marker that
 says "resume this" over finished work is worse than none.
@@ -97,8 +116,9 @@ change someone is mid-way through on another branch, and a change nobody has
 touched in a month. `STOPPED.md` distinguishes them, travels with the branch,
 shows up in the pull request, and is removed by the resume that consumes it.
 
-**5. Report the stop.** The name, which outcome it was (closed or suspended), the
-resume point if suspended, and one line saying the order no longer binds: nothing
+**5. Report the stop.** The name, which outcome it was (closed, suspended, or
+deferred to a plan before `propose`), the resume point if suspended, the plan
+path if deferred, and one line saying the order no longer binds: nothing
 about this change archives, merges or proceeds on green until `/start-change`
 opens it again.
 

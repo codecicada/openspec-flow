@@ -1,6 +1,6 @@
 ---
 name: start-change
-description: Open or resume the OpenSpec change flow from a description of the work — propose a session title and a change slug (or match a suspended change or a deferred plan in todo/), answer whether it deserves a change, verify the tree, base and slug, then establish that the documented order binds until /stop-change.
+description: Open or resume the OpenSpec change flow from a description of the work — propose a session title and a change slug (or match a suspended change or a deferred plan in todo/), answer whether it deserves a change, verify the tree, base and slug, then establish that the documented order binds until /stop-change and enter its next step — explore on a fresh open, the recorded next step on a resume.
 argument-hint: <description of the work>
 ---
 
@@ -196,12 +196,25 @@ base and its SHA, and which checks passed, naming any that were overridden. Then
 now binds until `/stop-change`:
 
 ```
-propose -> apply -> open PR -> verified green -> archive -> verify the apply
-  -> merge on explicit request
+explore -> propose -> apply -> open PR -> verified green -> archive
+  -> verify the apply -> merge on explicit request
 ```
 
 Archive comes **before** merge, and is not optional afterwards. Merge remains
 the only gate inside the flow.
+
+Then enter the first step, in the same turn, without waiting for the user to run
+it:
+
+- **fresh** — enter explore (`openspec-explore`) with the description as its
+  input. Explore writes no code and opens no change; what it finds is the
+  evidence `propose` starts from. It may still create change artifacts on the
+  user's confirmation, so do not describe it as read-only.
+- **resume** — enter the next step `STOPPED.md` recorded, not explore, unless
+  that step is explore.
+
+Stating the order without entering it is how explore went missing from this
+step: an order that only has to be read can be skipped by omission.
 
 ## Checks deliberately not here
 
