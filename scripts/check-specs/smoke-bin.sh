@@ -3,7 +3,7 @@
 # it: packed, installed into a fresh project, and invoked through the symlink
 # npm puts in `node_modules/.bin`.
 #
-# Why this exists, and why the 37 unit tests do not cover it: until commit
+# Why this exists, and why the unit tests do not cover it: until commit
 # e1567a4 the bin's entry guard compared `process.argv[1]` with
 # `import.meta.url` directly. Through the npm symlink those two are different
 # paths, so `main` never ran — the module loaded, printed nothing, and exited

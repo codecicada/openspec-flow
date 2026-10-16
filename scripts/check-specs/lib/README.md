@@ -108,8 +108,17 @@ Limits:
 - A declaration naming an inventory nothing derives is its own finding rather
   than a silent pass — a misspelled marker would otherwise leave the claim
   unenforced while looking enforced.
+- **Unarchived changes overlay the live lists** (`collectDeclarations`). An
+  `ADDED` or `MODIFIED` requirement carrying the marker replaces the live
+  requirement's list, as archive will replace its body, so a change adding an
+  item passes before it is archived — the flow archives only after CI is green,
+  so it could not otherwise pass at all. A delta requirement without the marker
+  leaves the live list in force. Two changes replacing the same declaring
+  requirement are a finding and that requirement is not compared: a union would
+  pass a state archive never produces, and picking one would pass a list the
+  other is about to overwrite.
 - Listed items are read from the declaring requirement's prose before its first
-  scenario, as backticked `METHOD path` entries (`GET|PUT` expands to two). The
+  scenario (and before the next requirement or `##` section), as backticked `METHOD path` entries (`GET|PUT` expands to two). The
   item format is route-shaped today.
 - If the repository also has a documentation checker comparing the same
   inventory, point both at the same deriver, so the two cannot disagree about

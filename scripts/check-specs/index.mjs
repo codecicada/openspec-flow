@@ -36,12 +36,11 @@ import {
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { checkDuplicateRequirements } from './lib/duplicates.mjs';
-import { checkInventories } from './lib/inventories.mjs';
 import {
-  parseDropMarkers,
-  parseInventoryDeclarations,
-  parseSpec,
-} from './lib/parse.mjs';
+  checkInventories,
+  collectDeclarations,
+} from './lib/inventories.mjs';
+import { parseDropMarkers, parseSpec } from './lib/parse.mjs';
 import { createResult, report } from './lib/report.mjs';
 import { checkScenarioDrops } from './lib/scenarios.mjs';
 import { checkStrictValidation } from './lib/validate.mjs';
@@ -209,20 +208,6 @@ function runOpenspecValidate(root) {
   };
 }
 
-/**
- * The items a declaring requirement lists, read from its own prose.
- *
- * `normalise` is the consumer's, the same function applied to the derived side.
- * Applying it to only one side turns every difference of spelling into drift.
- */
-function itemsFor(text, requirement, normalise = (x) => x) {
-  const after = text.split(`### Requirement: ${requirement}`)[1] ?? '';
-  const body = after.split('#### Scenario:')[0];
-  return [...body.matchAll(/`([A-Z|]+) ([^`]+)`/g)].flatMap((m) =>
-    m[1].split('|').map((method) => normalise(`${method} ${m[2].trim()}`)),
-  );
-}
-
 export async function runAllChecks(root = process.cwd()) {
   const config = readConfig(root);
 
@@ -239,23 +224,28 @@ export async function runAllChecks(root = process.cwd()) {
   const { derived, normalisers, failures: deriverFailures } =
     await deriveInventories(root, config);
 
-  const declared = liveSpecs.flatMap((spec) =>
-    parseInventoryDeclarations(spec.text).map((d) => ({
-      capability: spec.capability,
-      requirement: d.requirement,
-      inventory: d.inventory,
-      items: itemsFor(spec.text, d.requirement, normalisers[d.inventory]),
-    })),
-  );
-
   const liveByCapability = new Map(
     liveSpecs.map((spec) => [spec.capability, spec.parsed]),
   );
 
+  const changes = collectActiveChanges(root).map((change) => ({
+    name: change.name,
+    deltas: collectSpecs(join(change.abs, 'specs')).map((delta) => ({
+      capability: delta.capability,
+      text: readFileSync(delta.abs, 'utf8'),
+    })),
+  }));
+
+  const { declared, failures: declarationFailures } = collectDeclarations({
+    live: liveSpecs,
+    changes,
+    normalisers,
+  });
+
   const scenarioFailures = [];
-  for (const change of collectActiveChanges(root)) {
-    for (const delta of collectSpecs(join(change.abs, 'specs'))) {
-      const text = readFileSync(delta.abs, 'utf8');
+  for (const change of changes) {
+    for (const delta of change.deltas) {
+      const { text } = delta;
       scenarioFailures.push(
         ...checkScenarioDrops({
           capability: `${change.name} -> ${delta.capability}`,
@@ -272,6 +262,7 @@ export async function runAllChecks(root = process.cwd()) {
     createResult('duplicates', checkDuplicateRequirements(liveSpecs)),
     createResult('inventories', [
       ...deriverFailures.map((f) => ({ what: f.what, fix: f.fix })),
+      ...declarationFailures,
       ...checkInventories({ declared, derived }),
     ]),
     createResult(

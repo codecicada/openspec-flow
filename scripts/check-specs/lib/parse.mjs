@@ -231,3 +231,54 @@ export function parseDropMarkers(text) {
 
   return markers;
 }
+
+// A backticked `METHOD path` entry; `GET|PUT /x` names two items.
+const INVENTORY_ITEM = /`([A-Z|]+) ([^`]+)`/g;
+
+/**
+ * The items a declaring requirement lists, read from its own prose.
+ *
+ * Only the prose before the requirement's first scenario counts: a scenario
+ * quoting a route is an example, not the list. The body also ends at the next
+ * requirement or `##` section, so a requirement with no scenarios does not read
+ * its neighbours' lists as its own — which matters in a delta, where an ADDED
+ * requirement can follow a MODIFIED one directly.
+ *
+ * `normalise` is the consumer's, the same function applied to the derived side.
+ * Applying it to only one side turns every difference of spelling into drift.
+ *
+ * Works on a main spec and a delta alike. Returns items in document order.
+ */
+export function parseInventoryItems(text, requirement, normalise = (x) => x) {
+  const items = [];
+  let inside = false;
+  let inFence = false;
+
+  for (const line of String(text).split(/\r?\n/)) {
+    if (FENCE.test(line)) {
+      inFence = !inFence;
+    } else if (!inFence) {
+      const requirementMatch = line.match(REQUIREMENT_HEADER);
+      if (requirementMatch) {
+        if (inside) {
+          break;
+        }
+        inside = requirementMatch[1] === requirement;
+        continue;
+      }
+      if (inside && (SCENARIO_HEADER.test(line) || /^##\s/.test(line))) {
+        break;
+      }
+    }
+
+    if (inside) {
+      for (const m of line.matchAll(INVENTORY_ITEM)) {
+        for (const method of m[1].split('|')) {
+          items.push(normalise(`${method} ${m[2].trim()}`));
+        }
+      }
+    }
+  }
+
+  return items;
+}
