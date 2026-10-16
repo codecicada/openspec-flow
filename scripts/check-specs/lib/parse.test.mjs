@@ -2,6 +2,7 @@ import { deepStrictEqual, strictEqual } from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   parseDropMarkers,
+  parseInventoryDropMarkers,
   parseInventoryDeclarations,
   parseInventoryItems,
   parseSpec,
@@ -151,6 +152,31 @@ test('a marker quoted inside a fence is not a marker', () => {
   deepStrictEqual(
     parseDropMarkers(`\`\`\`
 <!-- drops-scenario: R :: Quoted -->
+\`\`\`
+
+## MODIFIED Requirements
+`),
+    [],
+  );
+});
+
+test('a drops-inventory marker above the first ## header is honoured', () => {
+  deepStrictEqual(
+    parseInventoryDropMarkers(`<!-- drops-inventory: Versioned REST surface :: routes -->
+<!-- drops-scenario: Versioned REST surface :: Health is reachable -->
+
+## MODIFIED Requirements
+
+<!-- drops-inventory: Versioned REST surface :: env -->
+`),
+    [{ requirement: 'Versioned REST surface', inventory: 'routes' }],
+  );
+});
+
+test('a drops-inventory marker quoted inside a fence is not a marker', () => {
+  deepStrictEqual(
+    parseInventoryDropMarkers(`\`\`\`
+<!-- drops-inventory: R :: routes -->
 \`\`\`
 
 ## MODIFIED Requirements

@@ -31,6 +31,7 @@ fact decides both placements, read in opposite directions:
 | marker | describes | must survive archive? | placement |
 |---|---|---|---|
 | `drops-scenario` | one change | no | **above** the first `##` |
+| `drops-inventory` | one change | no | **above** the first `##` |
 | `enumerates` | the capability | **yes** | **inside** the requirement |
 
 A drop marker is a note to a checker about one change. Copied into the main spec
@@ -69,8 +70,18 @@ The check reads what each unarchived change will make live. When a change adds
 an item — a new route, say — list it in the change's `MODIFIED` delta of the
 declaring requirement, marker included, and the check passes **before**
 archive. Do not archive early to satisfy it: the flow archives only after CI is
-green. A delta that omits the marker leaves the live list in force. Two
-unarchived changes replacing the same declaring requirement fail the check —
+green. A `MODIFIED` delta of a declaring requirement must carry the marker too:
+archive replaces the body in full, so leaving it out deletes the declaration and
+the claim stops being enforced. The check fails on that, naming the change,
+requirement and inventory. If the removal is deliberate, state it above the
+delta's first `##`:
+
+```
+<!-- drops-inventory: <Requirement name> :: <inventory> -->
+```
+
+Any other delta requirement without the marker leaves the live list in force.
+Two unarchived changes replacing the same declaring requirement fail the check —
 fold them into one, or archive one and rebase the other's delta.
 
 ## What no checker can tell you

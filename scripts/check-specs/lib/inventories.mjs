@@ -22,6 +22,7 @@
 
 import {
   parseInventoryDeclarations,
+  parseInventoryDropMarkers,
   parseInventoryItems,
   parseSpec,
 } from './parse.mjs';
@@ -29,6 +30,9 @@ import { createFailure } from './report.mjs';
 
 /** Delta operations whose requirement body becomes the live one on archive. */
 const OVERLAYING = new Set(['ADDED', 'MODIFIED']);
+
+/** Only MODIFIED replaces a live requirement, so only MODIFIED can drop a marker. */
+const REPLACING = 'MODIFIED';
 
 /** The declarations one spec or delta text makes, with their listed items. */
 function declarationsIn(text, capability, normalisers, keep = () => true) {
@@ -63,19 +67,27 @@ function declarationsIn(text, capability, normalisers, keep = () => true) {
  *   capability, or is a new declaration when the live spec has none. Archive
  *   replaces a requirement in full, so its list replaces the live list rather
  *   than adding to it.
- * - A delta requirement without a marker overlays nothing, and the live list
- *   stays in force until archive.
- * - Two changes that both overlay one requirement are a finding, and that
- *   requirement is not compared. They are not unioned: each delta replaces the
- *   requirement in full, so whichever is archived last discards the other's
- *   items. A union would pass a state archive never produces, and picking one
+ * - A MODIFIED requirement that leaves out a marker its live counterpart
+ *   carries is a finding, unless the delta's header holds a
+ *   `<!-- drops-inventory: <Requirement> :: <inventory> -->` marker naming it.
+ *   Archive replaces the body in full, so the declaration goes with the marker
+ *   and the claim stops being enforced without any check saying so. Either
+ *   way the live list is not compared: it is about to stop existing, and an
+ *   omission reported against it would point at the wrong fix.
+ * - Any other delta requirement without a marker overlays nothing, and the
+ *   live list stays in force until archive.
+ * - Two changes that both replace a declaring requirement are a finding, and
+ *   that requirement is not compared. They are not unioned: each delta
+ *   replaces the requirement in full, so whichever is archived last discards
+ *   the other's items — or, when one drops the declaration, the other's whole
+ *   list. A union would pass a state archive never produces, and picking one
  *   would pass a list the other change is about to overwrite.
  *
  * `live` is `[{ capability, text }]`; `changes` is
  * `[{ name, deltas: [{ capability, text }] }]`; `normalisers` is
- * `{ [inventory]: fn }`. Returns `{ declared, failures }`. A declaration drawn
- * from a delta is labelled `<change> -> <capability>`, as the `scenarios`
- * check labels its findings, so a failure names the change to fix.
+ * `{ [inventory]: fn }`. Returns `{ declared, failures }`. A declaration or
+ * finding drawn from a delta is labelled `<change> -> <capability>`, as the
+ * `scenarios` check labels its findings, so a failure names the change to fix.
  */
 export function collectDeclarations({
   live = [],
@@ -84,41 +96,74 @@ export function collectDeclarations({
 } = {}) {
   const key = (capability, requirement) => `${capability}\u0000${requirement}`;
 
-  // Every change that overlays a requirement, in the order they are read.
+  // The inventories each live requirement declares.
+  const liveInventories = new Map();
+  for (const spec of live) {
+    for (const d of parseInventoryDeclarations(spec.text)) {
+      const k = key(spec.capability, d.requirement);
+      liveInventories.set(k, [...(liveInventories.get(k) ?? []), d.inventory]);
+    }
+  }
+
+  const failures = [];
+
+  // Every change that replaces a declaring requirement, in the order they are
+  // read, with the declarations it leaves behind — none, when it drops them.
   const overlays = new Map();
   for (const change of changes) {
     for (const delta of change.deltas ?? []) {
-      const overlaying = new Set(
-        parseSpec(delta.text)
-          .requirements.filter((r) => OVERLAYING.has(r.operation))
-          .map((r) => r.name),
+      const label = `${change.name} -> ${delta.capability}`;
+      const requirements = parseSpec(delta.text).requirements.filter((r) =>
+        OVERLAYING.has(r.operation),
       );
+      const overlaying = new Set(requirements.map((r) => r.name));
       const found = declarationsIn(
         delta.text,
         delta.capability,
         normalisers,
         (requirement) => overlaying.has(requirement),
       );
-      for (const requirement of new Set(found.map((d) => d.requirement))) {
+      const dropMarkers = parseInventoryDropMarkers(delta.text);
+
+      for (const { name: requirement, operation } of requirements) {
         const k = key(delta.capability, requirement);
-        const entries = overlays.get(k) ?? [];
-        entries.push({
-          change: change.name,
-          capability: delta.capability,
-          requirement,
-          declarations: found
-            .filter((d) => d.requirement === requirement)
-            .map((d) => ({
-              ...d,
-              capability: `${change.name} -> ${d.capability}`,
-            })),
-        });
-        overlays.set(k, entries);
+        const declarations = found
+          .filter((d) => d.requirement === requirement)
+          .map((d) => ({ ...d, capability: label }));
+        const kept = new Set(declarations.map((d) => d.inventory));
+        const replacesDeclaration =
+          operation === REPLACING && liveInventories.has(k);
+
+        if (replacesDeclaration) {
+          for (const inventory of new Set(liveInventories.get(k))) {
+            const deliberate = dropMarkers.some(
+              (m) => m.requirement === requirement && m.inventory === inventory,
+            );
+            if (!kept.has(inventory) && !deliberate) {
+              failures.push(
+                createFailure(
+                  `${label}: MODIFIED requirement "${requirement}" drops its declaration that it enumerates "${inventory}", so archive would leave the claim unenforced`,
+                  `put \`<!-- enumerates: ${inventory} -->\` back inside the requirement — a MODIFIED requirement replaces its counterpart in full, so a marker it leaves out is deleted — or, if the removal is deliberate, add \`<!-- drops-inventory: ${requirement} :: ${inventory} -->\` above the first \`##\` header naming it`,
+                ),
+              );
+            }
+          }
+        }
+
+        if (declarations.length > 0 || replacesDeclaration) {
+          const entries = overlays.get(k) ?? [];
+          entries.push({
+            change: change.name,
+            capability: delta.capability,
+            requirement,
+            declarations,
+          });
+          overlays.set(k, entries);
+        }
       }
     }
   }
 
-  const failures = [];
   const conflicted = new Set();
   for (const [k, entries] of overlays) {
     const names = [...new Set(entries.map((e) => e.change))];

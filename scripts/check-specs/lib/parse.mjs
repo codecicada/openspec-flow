@@ -205,6 +205,36 @@ const DROP_MARKER = /^\s*<!--\s*drops-scenario:\s*(.+?)\s*::\s*(.+?)\s*-->\s*$/;
  * one scenario, so silencing one omission cannot silence another.
  */
 export function parseDropMarkers(text) {
+  return headerMarkers(text, DROP_MARKER).map(([requirement, scenario]) => ({
+    requirement,
+    scenario,
+  }));
+}
+
+// `<!-- drops-inventory: <Requirement> :: <inventory> -->`
+const INVENTORY_DROP_MARKER =
+  /^\s*<!--\s*drops-inventory:\s*(.+?)\s*::\s*([\w-]+)\s*-->\s*$/;
+
+/**
+ * Read the deliberate-removal markers for inventory declarations.
+ *
+ * The same rule as `parseDropMarkers`, for the same reason: a MODIFIED
+ * requirement that leaves out its `enumerates` marker deletes the declaration
+ * on archive, and an oversight looks exactly like a decision. The marker
+ * describes the change, not the capability, so it lives above the first `##`
+ * and is ignored anywhere else.
+ *
+ * Returns `[{ requirement, inventory }]` in document order. Each marker names
+ * one declaration, so silencing one removal cannot silence another.
+ */
+export function parseInventoryDropMarkers(text) {
+  return headerMarkers(text, INVENTORY_DROP_MARKER).map(
+    ([requirement, inventory]) => ({ requirement, inventory }),
+  );
+}
+
+/** The capture groups of each `pattern` line before the first `##` header. */
+function headerMarkers(text, pattern) {
   const markers = [];
   let inFence = false;
 
@@ -223,9 +253,9 @@ export function parseDropMarkers(text) {
       break;
     }
 
-    const match = line.match(DROP_MARKER);
+    const match = line.match(pattern);
     if (match) {
-      markers.push({ requirement: match[1], scenario: match[2] });
+      markers.push(match.slice(1));
     }
   }
 

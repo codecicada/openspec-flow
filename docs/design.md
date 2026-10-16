@@ -52,9 +52,9 @@ the checker does not recognise is printed and fails.
 
 An accidental scenario omission and a deliberate removal look the same in a
 file. A passing mention of a route and a claim of completeness look the same.
-So intent is always stated with a marker (`drops-scenario`, `enumerates`), and
-without a marker the checker assumes nothing. An undeclared inventory passes. An
-undeclared omission fails.
+So intent is always stated with a marker (`drops-scenario`, `drops-inventory`,
+`enumerates`), and without a marker the checker assumes nothing. An undeclared
+inventory passes. An undeclared omission fails.
 
 The flow follows the same rule outside the checker. A suspended change records
 `openspec/changes/<name>/STOPPED.md` — reason, head SHA, branch, PR, next step —
@@ -67,7 +67,7 @@ another branch, and work nobody has touched in a month.
 `openspec archive` copies requirement bodies into the main spec. A marker about
 **the change** goes where archive cannot reach it. A marker about **the
 capability** goes where archive carries it. See
-[Spec drift and markers](spec-drift.md#two-markers-opposite-placement-rules).
+[Spec drift and markers](spec-drift.md#two-placement-rules-opposite-directions).
 
 ## 6. Fail before the destructive step
 

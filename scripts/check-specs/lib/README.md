@@ -113,10 +113,21 @@ Limits:
   requirement's list, as archive will replace its body, so a change adding an
   item passes before it is archived — the flow archives only after CI is green,
   so it could not otherwise pass at all. A delta requirement without the marker
-  leaves the live list in force. Two changes replacing the same declaring
-  requirement are a finding and that requirement is not compared: a union would
-  pass a state archive never produces, and picking one would pass a list the
-  other is about to overwrite.
+  leaves the live list in force — except a `MODIFIED` one whose live counterpart
+  carries it. Archive would delete that declaration with the marker, so it is a
+  finding naming the change, requirement and inventory, unless the delta's header
+  states the removal (`parseInventoryDropMarkers`):
+
+  ```
+  <!-- drops-inventory: <Requirement name> :: <inventory> -->
+  ```
+
+  Same placement as `drops-scenario`, for the same reason: it describes the
+  change. Either way the live list is not compared — it is about to stop
+  existing. Two changes replacing the same declaring requirement, including one
+  that drops the declaration, are a finding and that requirement is not
+  compared: a union would pass a state archive never produces, and picking one
+  would pass a list the other is about to overwrite.
 - Listed items are read from the declaring requirement's prose before its first
   scenario (and before the next requirement or `##` section), as backticked `METHOD path` entries (`GET|PUT` expands to two). The
   item format is route-shaped today.
