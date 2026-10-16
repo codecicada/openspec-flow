@@ -55,7 +55,7 @@ the archive commit.
 | `strict` | `openspec validate --specs --strict` does |
 
 Three are pure text comparisons over `openspec/`, with no knowledge of your
-stack. 37 unit tests, no fixtures on disk.
+stack. 44 unit tests, no fixtures on disk.
 
 ## Install
 
@@ -160,6 +160,22 @@ see the `openspec-spec-drift` skill for why.
 An inventory no capability declares passes silently. Deciding that something
 deserves a capability is a judgement, not a defect.
 
+The comparison reads what each unarchived change will make live, not only
+`openspec/specs/`. A change that adds a route puts it in the code and in its
+`MODIFIED` delta, and the flow archives only after CI is green, so the check
+cannot wait for the archive. For each change under `openspec/changes/` (not
+`archive/`):
+
+- An `ADDED` or `MODIFIED` requirement carrying the marker replaces the live
+  requirement's list, exactly as archive will replace its body. A finding drawn
+  from it names the change: `add-events -> rest-api: ...`.
+- A delta requirement without the marker overlays nothing; the live list stays
+  in force until archive.
+- Two unarchived changes that both replace the same declaring requirement fail
+  the check, and that requirement is not compared. Each replaces it in full, so
+  whichever archives last would discard the other's items. Fold them into one
+  change, or archive one and rebase the other's delta.
+
 ## What it cannot do
 
 No check here reads application code, so none can tell you whether a requirement
@@ -170,7 +186,7 @@ reason that stopped being true months ago. That class needs a reader.
 ## Developing this package
 
 ```bash
-npm test            # 37 unit tests, no dependencies, no fixtures on disk
+npm test            # 44 unit tests, no dependencies, no fixtures on disk
 npm run test:bin    # packs, installs and drives the bin the way a consumer gets it
 npm run test:gates  # watches each /start-change and /stop-change refusal refuse
 ```

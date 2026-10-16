@@ -65,6 +65,14 @@ passing is not claiming completeness, and treating it as one would make every
 incidental mention a maintenance burden. An inventory nothing declares passes —
 deciding it deserves a capability is a judgement, not a defect.
 
+The check reads what each unarchived change will make live. When a change adds
+an item — a new route, say — list it in the change's `MODIFIED` delta of the
+declaring requirement, marker included, and the check passes **before**
+archive. Do not archive early to satisfy it: the flow archives only after CI is
+green. A delta that omits the marker leaves the live list in force. Two
+unarchived changes replacing the same declaring requirement fail the check —
+fold them into one, or archive one and rebase the other's delta.
+
 ## What no checker can tell you
 
 None of these checks reads application code. They compare specifications against

@@ -176,6 +176,14 @@ Failure modes that the check reports, rather than passing silently:
   drifted".
 - A declaration names an inventory that nothing derives. A misspelled marker
   otherwise leaves the claim unenforced while it looks enforced.
+- Two unarchived changes both replace the same declaring requirement. Each
+  replaces it in full, so whichever archives last discards the other's items.
+
+The listed side is read from the live spec **overlaid with each unarchived
+change**: an `ADDED` or `MODIFIED` requirement carrying the marker replaces the
+live list, as archive will replace the requirement. A change that adds a route
+therefore passes before it is archived. Without the overlay it could not pass at
+all, since the flow archives only once CI, which runs this check, is green.
 
 ## What no checker can tell you
 

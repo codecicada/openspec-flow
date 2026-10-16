@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   parseDropMarkers,
   parseInventoryDeclarations,
+  parseInventoryItems,
   parseSpec,
 } from './parse.mjs';
 
@@ -204,4 +205,32 @@ test('an enumerates marker inside a fence is not a declaration', () => {
 `),
     [],
   );
+});
+
+test('inventory items stop at the first scenario and at the next requirement', () => {
+  const text = `## MODIFIED Requirements
+
+### Requirement: Surface
+
+<!-- enumerates: routes -->
+
+Exposes \`GET|PUT /widgets/:id\`.
+
+## ADDED Requirements
+
+### Requirement: Other
+
+Exposes \`DELETE /other\`.
+
+#### Scenario: Example
+
+- **WHEN** a client calls \`GET /example\`
+`;
+
+  deepStrictEqual(parseInventoryItems(text, 'Surface'), [
+    'GET /widgets/:id',
+    'PUT /widgets/:id',
+  ]);
+  deepStrictEqual(parseInventoryItems(text, 'Other'), ['DELETE /other']);
+  deepStrictEqual(parseInventoryItems(text, 'Absent'), []);
 });

@@ -17,7 +17,7 @@ npx openspec-check-specs --root .
 ## Shape: an I/O shell around a pure core
 
 `index.mjs` owns every disk read and the one subprocess call. Each module under
-`lib/` is a pure function over text. That split is why the 37 unit tests need no
+`lib/` is a pure function over text. That split is why the 44 unit tests need no
 fixtures on disk.
 
 ```mermaid
@@ -35,10 +35,10 @@ flowchart TB
 
   subgraph core["lib/: the pure core"]
     direction TB
-    PARSE["parse.mjs<br/>parseSpec, parseDropMarkers,<br/>parseInventoryDeclarations"]
+    PARSE["parse.mjs<br/>parseSpec, parseDropMarkers,<br/>parseInventoryDeclarations,<br/>parseInventoryItems"]
     SCN["scenarios.mjs<br/>checkScenarioDrops"]
     DUP["duplicates.mjs<br/>checkDuplicateRequirements"]
-    INV["inventories.mjs<br/>checkInventories"]
+    INV["inventories.mjs<br/>collectDeclarations,<br/>checkInventories"]
     VAL["validate.mjs<br/>checkStrictValidation"]
     REP["report.mjs<br/>createResult, report"]
   end
@@ -75,9 +75,11 @@ sequenceDiagram
   R->>FS: read every openspec/specs/**/spec.md
   R->>D: import, then derive(root)
   D-->>R: string list, normalised
-  R->>R: collect enumerates declarations and their listed items
   loop each unarchived change
     R->>FS: read changes/name/specs/**/spec.md
+  end
+  R->>R: collectDeclarations(live, changes) — deltas overlay live lists
+  loop each delta
     R->>R: checkScenarioDrops(delta, live, markers)
   end
   R->>R: checkDuplicateRequirements(liveSpecs)
@@ -118,6 +120,16 @@ from the requirement's own prose, before its first scenario, as backticked
 `METHOD path` entries (`GET|PUT` expands to two items). The consumer's
 `normalise` is applied to both sides before the comparison. See
 [the inventory seam](spec-drift.md#the-inventory-seam).
+
+Declarations are read from the live specs **overlaid with every unarchived
+change**. An `ADDED` or `MODIFIED` requirement that carries the marker replaces
+the live requirement's list, as archive will replace its body, so a change that
+adds a route passes before it is archived — which it must, because the flow
+archives only after CI is green. A delta requirement without the marker leaves
+the live list in force. Two unarchived changes replacing the same declaring
+requirement are a finding, and that requirement is not compared: whichever
+archives last would discard the other's items, so neither a union nor either
+list describes what archive will produce.
 
 ### `strict` — OpenSpec's own validator
 

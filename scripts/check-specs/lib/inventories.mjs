@@ -20,7 +20,138 @@
  * derivation.
  */
 
+import {
+  parseInventoryDeclarations,
+  parseInventoryItems,
+  parseSpec,
+} from './parse.mjs';
 import { createFailure } from './report.mjs';
+
+/** Delta operations whose requirement body becomes the live one on archive. */
+const OVERLAYING = new Set(['ADDED', 'MODIFIED']);
+
+/** The declarations one spec or delta text makes, with their listed items. */
+function declarationsIn(text, capability, normalisers, keep = () => true) {
+  return parseInventoryDeclarations(text)
+    .filter((d) => keep(d.requirement))
+    .map((d) => ({
+      capability,
+      requirement: d.requirement,
+      inventory: d.inventory,
+      items: parseInventoryItems(
+        text,
+        d.requirement,
+        normalisers[d.inventory],
+      ),
+    }));
+}
+
+/**
+ * The declarations `checkInventories` compares: the live specs, overlaid with
+ * what each unarchived change will make live when it is archived.
+ *
+ * Without the overlay the check could not pass on a change that adds an item.
+ * The route goes into the code and into the change's MODIFIED delta; the live
+ * list stays one short until `openspec archive` runs; and the flow archives
+ * only once CI — which runs this check — is green. So the change could never
+ * get there.
+ *
+ * The overlay follows what archive will do, one requirement at a time:
+ *
+ * - An ADDED or MODIFIED requirement that carries an `enumerates` marker
+ *   replaces every live declaration of the same requirement in the same
+ *   capability, or is a new declaration when the live spec has none. Archive
+ *   replaces a requirement in full, so its list replaces the live list rather
+ *   than adding to it.
+ * - A delta requirement without a marker overlays nothing, and the live list
+ *   stays in force until archive.
+ * - Two changes that both overlay one requirement are a finding, and that
+ *   requirement is not compared. They are not unioned: each delta replaces the
+ *   requirement in full, so whichever is archived last discards the other's
+ *   items. A union would pass a state archive never produces, and picking one
+ *   would pass a list the other change is about to overwrite.
+ *
+ * `live` is `[{ capability, text }]`; `changes` is
+ * `[{ name, deltas: [{ capability, text }] }]`; `normalisers` is
+ * `{ [inventory]: fn }`. Returns `{ declared, failures }`. A declaration drawn
+ * from a delta is labelled `<change> -> <capability>`, as the `scenarios`
+ * check labels its findings, so a failure names the change to fix.
+ */
+export function collectDeclarations({
+  live = [],
+  changes = [],
+  normalisers = {},
+} = {}) {
+  const key = (capability, requirement) => `${capability}\u0000${requirement}`;
+
+  // Every change that overlays a requirement, in the order they are read.
+  const overlays = new Map();
+  for (const change of changes) {
+    for (const delta of change.deltas ?? []) {
+      const overlaying = new Set(
+        parseSpec(delta.text)
+          .requirements.filter((r) => OVERLAYING.has(r.operation))
+          .map((r) => r.name),
+      );
+      const found = declarationsIn(
+        delta.text,
+        delta.capability,
+        normalisers,
+        (requirement) => overlaying.has(requirement),
+      );
+      for (const requirement of new Set(found.map((d) => d.requirement))) {
+        const k = key(delta.capability, requirement);
+        const entries = overlays.get(k) ?? [];
+        entries.push({
+          change: change.name,
+          capability: delta.capability,
+          requirement,
+          declarations: found
+            .filter((d) => d.requirement === requirement)
+            .map((d) => ({
+              ...d,
+              capability: `${change.name} -> ${d.capability}`,
+            })),
+        });
+        overlays.set(k, entries);
+      }
+    }
+  }
+
+  const failures = [];
+  const conflicted = new Set();
+  for (const [k, entries] of overlays) {
+    const names = [...new Set(entries.map((e) => e.change))];
+    if (names.length > 1) {
+      conflicted.add(k);
+      const { capability, requirement } = entries[0];
+      failures.push(
+        createFailure(
+          `${capability}: requirement "${requirement}" declares an inventory and is replaced by ${names.length} unarchived changes: ${names.join(', ')}`,
+          'fold them into one change, or archive one and rebase the other\'s delta on the result — each replaces the requirement in full, so whichever archives last would discard the other\'s items, and neither list can be checked until then',
+        ),
+      );
+    }
+  }
+
+  const declared = [];
+  for (const spec of live) {
+    for (const d of declarationsIn(spec.text, spec.capability, normalisers)) {
+      if (!overlays.has(key(spec.capability, d.requirement))) {
+        declared.push(d);
+      }
+    }
+  }
+  for (const [k, entries] of overlays) {
+    if (!conflicted.has(k)) {
+      for (const entry of entries) {
+        declared.push(...entry.declarations);
+      }
+    }
+  }
+
+  return { declared, failures };
+}
 
 /**
  * Compare each declared inventory against the one derived from the code.
