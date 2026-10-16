@@ -2,7 +2,7 @@
 
 A specification drifts in two ways: it loses something without anyone seeing it
 go, or it stops describing the code while it still looks correct. This page
-explains both, and the two markers that let a spec author state intent. The
+explains both, and the markers that let a spec author state intent. The
 source of truth is the `openspec-spec-drift` skill.
 
 ## What a `MODIFIED` delta deletes silently
@@ -47,16 +47,26 @@ A deliberate removal is stated, not inferred:
 Each marker names one scenario. A marker for one omission cannot silence another
 omission in the same requirement.
 
-## Two markers, opposite placement rules
+The same hole exists for an inventory declaration, and the `inventories` check
+closes it the same way. A `MODIFIED` requirement that leaves out its
+`<!-- enumerates: X -->` marker deletes the declaration on archive, and the
+claim stops being enforced. That is a finding naming the change, requirement and
+inventory, unless the delta states the removal:
 
-One fact decides where both markers go: **`openspec archive` copies a
+```markdown
+<!-- drops-inventory: Versioned REST surface :: routes -->
+```
+
+## Two placement rules, opposite directions
+
+One fact decides where every marker goes: **`openspec archive` copies a
 requirement's body into the main spec.**
 
 ```mermaid
 flowchart TB
   subgraph deltaFile["Delta spec file"]
     direction TB
-    H["File header, above the first H2<br/><b>drops-scenario marker</b>"]
+    H["File header, above the first H2<br/><b>drops-scenario and drops-inventory markers</b>"]
     OP["MODIFIED Requirements"]
     subgraph req["Requirement: Versioned REST surface"]
       E["<b>enumerates: routes marker</b>"]
@@ -82,6 +92,7 @@ flowchart TB
 | marker | describes | must survive archive? | placement |
 |---|---|---|---|
 | `drops-scenario` | one change | no | **above** the first `##` |
+| `drops-inventory` | one change | no | **above** the first `##` |
 | `enumerates` | the capability | **yes** | **inside** the requirement |
 
 - A **drop marker** is a note to the checker about one change. If archive
@@ -176,6 +187,10 @@ Failure modes that the check reports, rather than passing silently:
   drifted".
 - A declaration names an inventory that nothing derives. A misspelled marker
   otherwise leaves the claim unenforced while it looks enforced.
+- A `MODIFIED` delta leaves out the `enumerates` marker its live requirement
+  carries, and no `drops-inventory` marker says the removal is deliberate.
+  Archive would delete the declaration, and nothing would compare the list
+  again.
 - Two unarchived changes both replace the same declaring requirement. Each
   replaces it in full, so whichever archives last discards the other's items.
 

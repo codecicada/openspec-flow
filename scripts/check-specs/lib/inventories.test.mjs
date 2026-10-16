@@ -196,11 +196,54 @@ The system SHALL expose \`GET /admin/stats\`.
   );
 });
 
-test('a delta that modifies the requirement without a marker leaves the live list in force', () => {
-  const change = modifying('2026-10-15-events', ['GET /events']);
+/** `modifying`, with the delta's `enumerates` marker taken out and `header` above it. */
+function dropping(name, extra, header = '') {
+  const change = modifying(name, extra);
+  change.deltas[0].text =
+    header +
+    change.deltas[0].text.replace('<!-- enumerates: routes -->\n', '');
+  return change;
+}
+
+test('a MODIFIED delta that drops the marker is its own finding, naming change, requirement and inventory', () => {
+  const failures = check({
+    changes: [dropping('2026-10-15-events', ['GET /events'])],
+    routes: ['GET /health', 'POST /widgets', 'GET /events'],
+  });
+
+  // Archive replaces the requirement in full, so the declaration goes with the
+  // marker. The live list is not compared: it is about to stop existing, and an
+  // omission reported against it would point at the wrong fix.
+  strictEqual(failures.length, 1);
+  match(failures[0].what, /^2026-10-15-events -> rest-api: /);
+  match(failures[0].what, /"Versioned REST surface"/);
+  match(failures[0].what, /routes/);
+  match(failures[0].fix, /enumerates: routes/);
+  match(failures[0].fix, /drops-inventory: Versioned REST surface :: routes/);
+});
+
+test('a drops-inventory marker above the first ## makes the removal deliberate', () => {
+  deepStrictEqual(
+    check({
+      changes: [
+        dropping(
+          '2026-10-15-events',
+          ['GET /events'],
+          '<!-- drops-inventory: Versioned REST surface :: routes -->\n\n',
+        ),
+      ],
+      // Nothing declares routes once archived, so nothing is compared.
+      routes: ['GET /health', 'GET /events'],
+    }),
+    [],
+  );
+});
+
+test('a drops-inventory marker inside the requirement is not honoured', () => {
+  const change = dropping('2026-10-15-events', ['GET /events']);
   change.deltas[0].text = change.deltas[0].text.replace(
-    '<!-- enumerates: routes -->\n',
-    '',
+    '### Requirement: Versioned REST surface\n',
+    '### Requirement: Versioned REST surface\n\n<!-- drops-inventory: Versioned REST surface :: routes -->\n',
   );
 
   const failures = check({
@@ -209,7 +252,77 @@ test('a delta that modifies the requirement without a marker leaves the live lis
   });
 
   strictEqual(failures.length, 1);
+  match(failures[0].what, /2026-10-15-events -> rest-api/);
+});
+
+test('a delta that keeps one of two markers drops only the other', () => {
+  const live = {
+    capability: 'rest-api',
+    text: liveRestApi.text.replace(
+      '<!-- enumerates: routes -->\n',
+      '<!-- enumerates: routes -->\n<!-- enumerates: env -->\n',
+    ),
+  };
+  const { declared, failures } = collectDeclarations({
+    live: [live],
+    changes: [modifying('2026-10-15-events', ['GET /events'])],
+  });
+
+  strictEqual(failures.length, 1);
+  match(failures[0].what, /"Versioned REST surface"/);
+  match(failures[0].what, /"env"/);
+  deepStrictEqual(
+    declared.map((d) => `${d.capability} ${d.inventory}`),
+    ['2026-10-15-events -> rest-api routes'],
+  );
+});
+
+test('a MODIFIED delta of a requirement that declares nothing leaves the live list in force', () => {
+  const failures = check({
+    changes: [
+      {
+        name: '2026-10-15-docs',
+        deltas: [
+          {
+            capability: 'rest-api',
+            text: `## MODIFIED Requirements
+
+### Requirement: Error format
+
+Errors SHALL be JSON.
+
+#### Scenario: An error is JSON
+
+- **WHEN** a request fails
+- **THEN** the body is JSON
+`,
+          },
+        ],
+      },
+    ],
+    routes: ['GET /health', 'POST /widgets', 'GET /events'],
+  });
+
+  strictEqual(failures.length, 1);
   match(failures[0].what, /^rest-api: .* omits 1: GET \/events/);
+});
+
+test('a change dropping the declaration and another re-listing it fail loudly', () => {
+  const failures = check({
+    changes: [
+      modifying('2026-10-15-events', ['GET /events']),
+      dropping(
+        '2026-10-15-retire',
+        [],
+        '<!-- drops-inventory: Versioned REST surface :: routes -->\n\n',
+      ),
+    ],
+    routes: ['GET /health', 'POST /widgets', 'GET /events'],
+  });
+
+  strictEqual(failures.length, 1);
+  match(failures[0].what, /2026-10-15-events/);
+  match(failures[0].what, /2026-10-15-retire/);
 });
 
 test('two unarchived changes declaring the same inventory requirement fail loudly', () => {

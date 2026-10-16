@@ -22,7 +22,7 @@ safe to run without a gate in the middle.
 | page | read it for |
 |---|---|
 | [The change flow](change-flow.md) | the sequence, where the gate is and why, what the brackets are for, what "green" means, what happens after archive |
-| [Spec drift and markers](spec-drift.md) | what a `MODIFIED` delta deletes silently, the two markers and why their placement rules are opposites, the inventory seam |
+| [Spec drift and markers](spec-drift.md) | what a `MODIFIED` delta deletes silently, the markers and why their placement rules are opposites, the inventory seam |
 | [The checker](checker.md) | how `check-specs` is built: the I/O shell, the pure core, each check, the output contract |
 | [Design principles](design.md) | the rules the rest of the package follows, and what it deliberately does not do |
 

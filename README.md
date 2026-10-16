@@ -169,12 +169,24 @@ cannot wait for the archive. For each change under `openspec/changes/` (not
 - An `ADDED` or `MODIFIED` requirement carrying the marker replaces the live
   requirement's list, exactly as archive will replace its body. A finding drawn
   from it names the change: `add-events -> rest-api: ...`.
-- A delta requirement without the marker overlays nothing; the live list stays
-  in force until archive.
+- A `MODIFIED` requirement that leaves out a marker the live requirement
+  carries fails the check, naming the change, requirement and inventory. Archive
+  replaces the body in full, so the declaration would vanish with the marker and
+  the claim would stop being enforced. Put the marker back or, if the removal is
+  deliberate, say so above the delta's first `##`:
+
+  ```markdown
+  <!-- drops-inventory: Versioned REST surface :: routes -->
+  ```
+
+  Either way the live list is not compared: it is about to stop existing.
+- Any other delta requirement without the marker overlays nothing; the live
+  list stays in force until archive.
 - Two unarchived changes that both replace the same declaring requirement fail
   the check, and that requirement is not compared. Each replaces it in full, so
-  whichever archives last would discard the other's items. Fold them into one
-  change, or archive one and rebase the other's delta.
+  whichever archives last would discard the other's items — or, if it drops the
+  declaration, the other's whole list. Fold them into one change, or archive one
+  and rebase the other's delta.
 
 ## What it cannot do
 

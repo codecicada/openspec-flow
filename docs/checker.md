@@ -125,10 +125,16 @@ Declarations are read from the live specs **overlaid with every unarchived
 change**. An `ADDED` or `MODIFIED` requirement that carries the marker replaces
 the live requirement's list, as archive will replace its body, so a change that
 adds a route passes before it is archived — which it must, because the flow
-archives only after CI is green. A delta requirement without the marker leaves
-the live list in force. Two unarchived changes replacing the same declaring
-requirement are a finding, and that requirement is not compared: whichever
-archives last would discard the other's items, so neither a union nor either
+archives only after CI is green. A `MODIFIED` requirement that leaves out a
+marker its live counterpart carries is a finding, unless a `drops-inventory`
+marker above the delta's first `##` names that requirement and inventory:
+archive would delete the declaration with the marker, and the claim would stop
+being enforced without anything saying so. Either way the live list is not
+compared, because it is about to stop existing. Any other delta requirement
+without the marker leaves the live list in force. Two unarchived changes
+replacing the same declaring requirement are a finding, and that requirement is
+not compared: whichever archives last would discard the other's items (or, if it
+drops the declaration, the other's whole list), so neither a union nor either
 list describes what archive will produce.
 
 ### `strict` — OpenSpec's own validator
