@@ -149,7 +149,7 @@ repository fills:
 ```mermaid
 flowchart LR
   subgraph consumer["Consumer repository"]
-    CFG["openspec-flow.json<br/>derivers.routes = ./scripts/derive-routes.mjs"]
+    CFG["openspec-steward.json<br/>derivers.routes = ./scripts/derive-routes.mjs"]
     MOD["derive-routes.mjs<br/>default: root to string list<br/>normalise: item to string"]
     CODE["application code"]
     SPEC["spec.md<br/>requirement with enumerates: routes"]
