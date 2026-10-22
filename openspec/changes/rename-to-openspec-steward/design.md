@@ -14,14 +14,17 @@ quoted `/openspec-flow:start-change` error in
 
 ## Decision
 
-1. Move config resolution to `scripts/check-specs/lib/config.mjs`, exporting
-   `readConfig(root, { warn })`. `warn` defaults to writing to stderr and is
-   injected in tests, the same seam `report()` uses with `write`.
+1. Move config *selection* to `scripts/check-specs/lib/config.mjs` as a pure
+   function, `selectConfig({ current, legacy })`, over the two files' contents
+   (`null` when absent), returning `{ derivers, notes }`. `index.mjs` keeps the
+   reads, as it owns all disk I/O and every `lib/` module is tested without
+   fixtures on disk.
 2. Order: `openspec-steward.json`, then `openspec-flow.json` with a deprecation
    note. With both present, the current file wins, the legacy file is not
    parsed, and a note names it as ignored.
-3. Notes go through `warn` only. They are never findings and never touch the
-   exit code, so a consumer mid-migration stays green.
+3. `index.mjs` writes notes to stderr. They are never findings and never touch
+   the exit code, so a consumer mid-migration stays green. The bin smoke test
+   observes this end to end, since no unit test reaches `index.mjs`.
 4. Rename every live mention. Historical references and archived changes keep
    the old name: they describe what was true then, and GitHub redirects the old
    repository URLs.
@@ -34,8 +37,8 @@ quoted `/openspec-flow:start-change` error in
 
 - An existing consumer's inventory check keeps running after upgrading, with
   one stderr line telling them to rename the file.
-- `readConfig` gains unit tests; the fallback is watched failing before it is
-  trusted.
+- Config selection gains unit tests; the fallback is watched failing before it
+  is trusted.
 - Upgrading needs a one-time edit to the consumer's `.claude/settings.json`;
   the README's migration section says which.
 - The version bump lands in this change, not a separate release PR: the

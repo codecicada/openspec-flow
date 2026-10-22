@@ -98,7 +98,7 @@ Limits:
   this check cannot tell you that something *should* be specced, only that a
   stated claim has stopped being true.
 - **This package derives nothing itself.** Every inventory comes from a deriver
-  module the consumer configures in `openspec-flow.json`. The module
+  module the consumer configures in `openspec-steward.json`. The module
   default-exports `(root) => string[]` and may export `normalise(item) => string`,
   which is applied to **both** sides — normalising only the derived side reports
   every difference of spelling as drift.
@@ -134,6 +134,21 @@ Limits:
 - If the repository also has a documentation checker comparing the same
   inventory, point both at the same deriver, so the two cannot disagree about
   what an item is.
+
+## Configuration — which file is read
+
+`lib/config.mjs`
+
+Not a check: it decides which configuration file `inventories` gets its
+derivers from. `openspec-steward.json` is read first. The plugin was called
+openspec-flow until 0.5.0, so `openspec-flow.json` is still read when it is the
+only file — a consumer that upgraded without renaming it must not lose its
+inventory check, because a deriver that silently stops running reads as "nothing
+drifted". With both present, `openspec-steward.json` wins and the legacy file is
+not parsed.
+
+Either case returns a note, which the entry point prints on stderr. A note is
+not a finding and never changes the exit code. The fallback is removed at 1.0.
 
 ## `strict` — openspec's own validator
 

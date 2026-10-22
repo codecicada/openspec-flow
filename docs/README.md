@@ -1,6 +1,6 @@
-# openspec-flow — documentation
+# openspec-steward — documentation
 
-openspec-flow is a Claude Code plugin, and an npm package, for repositories that
+openspec-steward is a Claude Code plugin, and an npm package, for repositories that
 use [OpenSpec](https://github.com/fission-ai/openspec). It gives such a
 repository two things:
 
@@ -30,7 +30,7 @@ safe to run without a gate in the middle.
 
 ```mermaid
 flowchart LR
-  subgraph plugin["openspec-flow"]
+  subgraph plugin["openspec-steward"]
     direction TB
     subgraph skills["Skills: the reasoning"]
       S1["openspec-change-flow"]
@@ -50,7 +50,7 @@ flowchart LR
 
   subgraph consumer["Consumer repository"]
     O["openspec/specs + openspec/changes"]
-    CFG["openspec-flow.json"]
+    CFG["openspec-steward.json"]
     D["deriver modules"]
     CI["CI job / pre-push hook"]
   end
@@ -97,5 +97,5 @@ scripts/gates/refusal-cases.sh      each gate refusal, observed refusing
 .github/workflows/ci.yml            unit tests on Node 20/22/24, smoke test on 22, gate refusals
 ```
 
-Installation and the `openspec-flow.json` format are in the
+Installation and the `openspec-steward.json` format are in the
 [top-level README](../README.md).

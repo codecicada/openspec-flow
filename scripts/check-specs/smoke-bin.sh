@@ -16,12 +16,13 @@
 # an installed copy makes observations A and C below both report exit 0 with no
 # output, which is what this script now refuses to accept.
 #
-# The four observations, in the order they run:
+# The five observations, in the order they run:
 #
 #   A  --help exits 0 AND prints its usage      the bin's main() ran at all
 #   B  no openspec CLI  -> exit 1 naming strict  a tool that never ran is not a pass
 #   C  seeded fault     -> exit 1 naming it      the checker has teeth
 #   D  fault repaired   -> exit 0                and does not fire on everything
+#   E  legacy config    -> exit 0, note on stderr  a deprecation is not a finding
 #
 # C and D are the same fixture, one scenario apart. A guard that fires on
 # everything is as useless as one that fires on nothing, so both directions of
@@ -79,7 +80,7 @@ fi
 mkdir -p "$WORK/consumer"
 cat >"$WORK/consumer/package.json" <<'JSON'
 {
-  "name": "openspec-flow-smoke-consumer",
+  "name": "openspec-steward-smoke-consumer",
   "version": "1.0.0",
   "private": true,
   "type": "module"
@@ -246,6 +247,30 @@ if [ "$STATUS" -eq 0 ] && printf '%s' "$OUT" | grep -q 'specification checks pas
 else
   observe fail "the repaired fixture should exit 0 with all four checks passing; got status $STATUS and output: $OUT"
 fi
+
+# --- E: a legacy config file is read with a note, not a finding ---------------
+#
+# The plugin was renamed, and `openspec-flow.json` is still read when it is the
+# only config file. No unit test reaches index.mjs, which is where the note is
+# written and kept out of the results, so this is the only place that can see a
+# note leak into stdout or redden the exit code. Stderr is captured apart from
+# stdout for the same reason.
+
+printf '{ "derivers": {} }\n' >"$WORK/consumer/openspec-flow.json"
+set +e
+OUT=$(cd "$WORK/consumer" && "$BIN" --root . 2>"$WORK/stderr")
+STATUS=$?
+set -e
+ERR=$(cat "$WORK/stderr")
+if [ "$STATUS" -eq 0 ] &&
+  printf '%s' "$OUT" | grep -q 'specification checks passed (4)' &&
+  ! printf '%s' "$OUT" | grep -q 'deprecated' &&
+  printf '%s' "$ERR" | grep -q 'openspec-flow.json is deprecated'; then
+  observe ok 'a legacy openspec-flow.json passes with its note on stderr only'
+else
+  observe fail "a legacy config should exit 0 with the note on stderr only; got status $STATUS, stdout: $OUT, stderr: $ERR"
+fi
+rm -f "$WORK/consumer/openspec-flow.json"
 
 printf '\n'
 if [ "$FAILURES" -ne 0 ]; then

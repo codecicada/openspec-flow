@@ -1,4 +1,4 @@
-# openspec-flow
+# openspec-steward
 
 A Claude Code plugin for repositories using [OpenSpec](https://github.com/fission-ai/openspec):
 a change flow with **one human gate inside it, at merge**, bracketed by an
@@ -55,7 +55,7 @@ the archive commit.
 | `strict` | `openspec validate --specs --strict` does |
 
 Three are pure text comparisons over `openspec/`, with no knowledge of your
-stack. 44 unit tests, no fixtures on disk.
+stack. 57 unit tests, no fixtures on disk.
 
 ## Install
 
@@ -66,16 +66,16 @@ everyone who opens the consumer repository by committing this to its
 ```json
 {
   "extraKnownMarketplaces": {
-    "openspec-flow": {
+    "openspec-steward": {
       "source": {
         "source": "github",
-        "repo": "codecicada/openspec-flow",
-        "ref": "v0.4.1"
+        "repo": "codecicada/openspec-steward",
+        "ref": "v0.5.0"
       }
     }
   },
   "enabledPlugins": {
-    "openspec-flow@openspec-flow": true
+    "openspec-steward@openspec-steward": true
   }
 }
 ```
@@ -86,8 +86,8 @@ Claude Code offers to install the marketplace and the plugin the first time the
 repository is trusted. For one machine only, without touching the repository:
 
 ```bash
-claude plugin marketplace add codecicada/openspec-flow
-claude plugin install openspec-flow@openspec-flow
+claude plugin marketplace add codecicada/openspec-steward
+claude plugin install openspec-steward@openspec-steward
 ```
 
 Then wire the checker into the consumer repository:
@@ -109,6 +109,26 @@ The checker needs no build, no database and no credentials, so give it its own C
 job rather than appending it to one that builds. It needs no git history either —
 check out shallow.
 
+## Migrating from openspec-flow
+
+The plugin was called openspec-flow until 0.5.0. The name was changed because
+`openspec-flow` on npm is an unrelated package. To upgrade:
+
+1. In `.claude/settings.json`, rename the marketplace key `openspec-flow` to
+   `openspec-steward`, set `repo` to `codecicada/openspec-steward` and `ref` to
+   `v0.5.0`, and replace `openspec-flow@openspec-flow` in `enabledPlugins` with
+   `openspec-steward@openspec-steward`.
+2. Rename `openspec-flow.json` to `openspec-steward.json`.
+
+Step 2 can wait. Until 1.0 the checker still reads `openspec-flow.json` when it
+is the only config file, and prints a deprecation note on stderr. With both
+present, `openspec-steward.json` wins and the note names `openspec-flow.json` as
+ignored. Neither note changes the exit code.
+
+Skill names, commands and the `openspec-check-specs` bin are unchanged; only the
+plugin namespace in front of them moves from `openspec-flow:` to
+`openspec-steward:`. A consumer pinned to an older tag keeps working as it is.
+
 ## Declaring an inventory
 
 Three of the four checks work anywhere. `inventories` has to derive something
@@ -116,7 +136,7 @@ from *your* code, which is the one thing this plugin cannot know: routes come
 from NestJS decorators in one repository, an Express router in another, an
 OpenAPI document in a third.
 
-So the derivation is yours. `openspec-flow.json` at the repository root:
+So the derivation is yours. `openspec-steward.json` at the repository root:
 
 ```json
 {
@@ -198,7 +218,7 @@ reason that stopped being true months ago. That class needs a reader.
 ## Developing this package
 
 ```bash
-npm test            # 44 unit tests, no dependencies, no fixtures on disk
+npm test            # 57 unit tests, no dependencies, no fixtures on disk
 npm run test:bin    # packs, installs and drives the bin the way a consumer gets it
 npm run test:gates  # watches each /start-change and /stop-change refusal refuse
 ```
@@ -212,10 +232,11 @@ directly and never reaches the entry point, so when the bin silently exited 0
 through its npm symlink all 37 stayed green: `process.argv[1]` is the symlink
 while `import.meta.url` is the real file, and the entry guard compared them
 directly. `scripts/check-specs/smoke-bin.sh` covers that seam by installing the
-packed tarball into a throwaway project and making four observations — the bin
+packed tarball into a throwaway project and making five observations — the bin
 prints its usage, a missing `openspec` CLI fails loudly rather than passing, a
-seeded dropped scenario is caught *and named*, and restoring it goes green
-again.
+seeded dropped scenario is caught *and named*, restoring it goes green again,
+and a legacy `openspec-flow.json` passes with its deprecation note on stderr
+only.
 
 Watched failing before being trusted, per the `openspec-evidence` skill:
 reintroducing that entry guard leaves `npm test` at 37 passed while the smoke

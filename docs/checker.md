@@ -17,7 +17,7 @@ npx openspec-check-specs --root .
 ## Shape: an I/O shell around a pure core
 
 `index.mjs` owns every disk read and the one subprocess call. Each module under
-`lib/` is a pure function over text. That split is why the 44 unit tests need no
+`lib/` is a pure function over text. That split is why the 57 unit tests need no
 fixtures on disk.
 
 ```mermaid
@@ -25,7 +25,7 @@ flowchart TB
   subgraph shell["index.mjs: the I/O shell"]
     direction TB
     CLI["main: parse --root, --help"]
-    CFG["readConfig<br/>openspec-flow.json"]
+    CFG["readConfig<br/>openspec-steward.json, else openspec-flow.json"]
     SPECS["collectSpecs<br/>openspec/specs/**/spec.md"]
     CHG["collectActiveChanges<br/>openspec/changes/*, not archive/"]
     DER["deriveInventories<br/>dynamic import of deriver modules"]
@@ -58,6 +58,21 @@ flowchart TB
 `validate.mjs` receives the subprocess as an injected `run()` function. Its
 tests exercise the output parsing without starting a real CLI.
 
+`config.mjs` receives the two candidate config files as text. `readConfig`
+reads `openspec-steward.json` and the legacy `openspec-flow.json` (the plugin's
+name before 0.5.0), and `selectConfig` decides which one wins:
+
+| present | read | note on stderr |
+|---|---|---|
+| neither | nothing, no derivers | none |
+| `openspec-steward.json` | it | none |
+| `openspec-flow.json` | it | deprecated, rename it |
+| both | `openspec-steward.json` | `openspec-flow.json` ignored |
+
+A note is not a finding and never changes the exit code. The legacy name is
+still read so that an upgrade without the rename does not silently stop the
+`inventories` check. It stops being read at 1.0.
+
 ## One run, in order
 
 ```mermaid
@@ -71,7 +86,7 @@ sequenceDiagram
   participant P as report
 
   M->>R: root
-  R->>FS: read openspec-flow.json (optional)
+  R->>FS: read openspec-steward.json, else openspec-flow.json (optional)
   R->>FS: read every openspec/specs/**/spec.md
   R->>D: import, then derive(root)
   D-->>R: string list, normalised
@@ -227,7 +242,7 @@ and passing a glob fails on Node 20.
 package, installs the tarball into a temporary project, and calls the bin
 through the `node_modules/.bin` symlink. It installs a pinned
 `@fission-ai/openspec` from the registry, so it is the only test that needs the
-network. It makes four observations, and probes the boundary in both
+network. It makes five observations, and probes the boundary in both
 directions:
 
 ```mermaid
@@ -235,12 +250,15 @@ flowchart LR
   A["A: --help<br/>exit 0 and prints usage"] --> B["B: no openspec CLI<br/>exit 1, names strict"]
   B --> C["C: seeded dropped scenario<br/>exit 1, names it"]
   C --> D["D: scenario restored<br/>exit 0"]
+  D --> E["E: legacy openspec-flow.json<br/>exit 0, note on stderr"]
 ```
 
 - **A** proves that `main` ran at all.
 - **B** proves that a tool that never ran is not read as a pass.
 - **C** proves that the checker catches a real fault.
 - **D** proves that it does not fire on everything.
+- **E** proves that a deprecation note stays out of the findings and the exit
+  code. No unit test reaches `index.mjs`, where the note is written.
 
 With the old entry guard put back, `npm test` still reports 37 passed, while
 the smoke test fails.

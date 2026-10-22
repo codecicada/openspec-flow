@@ -80,7 +80,7 @@ also means that it needs no git history.
 Three of the four checks are text comparisons with no knowledge of the
 consumer's stack. The one check that must read code (`inventories`) does so
 through a deriver module that the consumer owns and configures in
-`openspec-flow.json`. The package defines the contract (`derive`,
+`openspec-steward.json`. The package defines the contract (`derive`,
 `normalise` on both sides), not the implementation.
 
 ## 8. Pure core, thin shell

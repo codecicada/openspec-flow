@@ -35,6 +35,11 @@ import {
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import {
+  CONFIG_FILE,
+  LEGACY_CONFIG_FILE,
+  selectConfig,
+} from './lib/config.mjs';
 import { checkDuplicateRequirements } from './lib/duplicates.mjs';
 import {
   checkInventories,
@@ -48,7 +53,6 @@ import { checkStrictValidation } from './lib/validate.mjs';
 const PATHS = {
   specs: 'openspec/specs',
   changes: 'openspec/changes',
-  config: 'openspec-flow.json',
 };
 
 /** Applied deltas are history; only unarchived changes are inspected. */
@@ -108,20 +112,32 @@ function collectActiveChanges(root) {
     .filter((change) => statSync(change.abs).isDirectory());
 }
 
-/** The consumer's configuration, or an empty one. Absence is not an error. */
-function readConfig(root) {
-  const abs = join(root, PATHS.config);
-  if (!existsSync(abs)) {
-    return { derivers: {} };
+/** A file's contents, or `null` when it is absent. */
+function readOptional(abs) {
+  return existsSync(abs) ? readFileSync(abs, 'utf8') : null;
+}
+
+/**
+ * The consumer's configuration, or an empty one. Absence is not an error.
+ *
+ * Which file wins is `selectConfig`'s decision (`lib/config.mjs`); its notes go
+ * to `warn`, never into the results, so they cannot change the exit code.
+ */
+function readConfig(root, warn) {
+  const { derivers, file, notes } = selectConfig({
+    current: readOptional(join(root, CONFIG_FILE)),
+    legacy: readOptional(join(root, LEGACY_CONFIG_FILE)),
+  });
+  for (const note of notes) {
+    warn(note);
   }
-  const parsed = JSON.parse(readFileSync(abs, 'utf8'));
-  return { derivers: parsed.derivers ?? {} };
+  return { derivers, file };
 }
 
 /**
  * Derive each configured inventory by loading the consumer's deriver module.
  *
- * `openspec-flow.json` maps an inventory name to a module path relative to the
+ * `openspec-steward.json` maps an inventory name to a module path relative to the
  * repository root:
  *
  *     { "derivers": { "routes": "./scripts/derive-routes.mjs" } }
@@ -150,7 +166,7 @@ async function deriveInventories(root, config) {
       failures.push({
         inventory,
         what: `deriver for "${inventory}" not found at ${modulePath}`,
-        fix: 'correct the path in openspec-flow.json, or remove the entry if the inventory is no longer derived',
+        fix: `correct the path in ${config.file}, or remove the entry if the inventory is no longer derived`,
       });
       continue;
     }
@@ -208,8 +224,11 @@ function runOpenspecValidate(root) {
   };
 }
 
-export async function runAllChecks(root = process.cwd()) {
-  const config = readConfig(root);
+export async function runAllChecks(
+  root = process.cwd(),
+  { warn = (line) => console.error(line) } = {},
+) {
+  const config = readConfig(root, warn);
 
   const liveSpecs = collectSpecs(join(root, PATHS.specs)).map((spec) => {
     const text = readFileSync(spec.abs, 'utf8');

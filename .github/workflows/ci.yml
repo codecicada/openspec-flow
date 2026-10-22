@@ -1,4 +1,4 @@
-# CI for openspec-flow.
+# CI for openspec-steward.
 #
 # This repository is a Claude Code plugin and an npm package at once. CI can
 # only exercise the package half: loading the plugin needs
