@@ -16,9 +16,10 @@ not substituted: say so and stop, rather than guessing the plugin's path.
 - **Exit 0** — each file is either `updated` or `already set up`. Name which.
   Nothing is committed: the user decides that.
 - **Exit 1** — init refused and wrote nothing. Show its message as printed.
-  When it prints the expected `rules:` block, the repository already has rules
-  of its own: do not merge them into `openspec/config.yaml` yourself. Which
-  rules win is the user's call.
+  When it prints a `rules:` block, the repository has rules of its own that
+  lack those steward items; adding them under their keys, next to its own
+  rules, lets a rerun pass. Do not edit `openspec/config.yaml` yourself: which
+  rules the repository keeps is the user's call.
 
 The rules themselves live in `openspec/config.yaml`; the `AGENTS.md` section
 only points at them.

@@ -60,8 +60,8 @@ their keys.
 ### Requirement: Unreadable rules refuse
 
 Init SHALL refuse, exit 1 and write nothing when a top-level `rules:` block is
-not block-style keys with `- item` lists, and SHALL say so and print the steward
-block.
+not block style, each key once with a `- item` list, and SHALL say so and
+print the steward block.
 
 #### Scenario: Flow-style rules
 

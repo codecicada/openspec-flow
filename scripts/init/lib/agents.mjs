@@ -2,9 +2,16 @@
  * The openspec-steward section init keeps in a consumer's root `AGENTS.md`.
  *
  * Agents other than Claude Code read `AGENTS.md` and never see this plugin's
- * skills, so this is where they learn the flow. The section states the order
- * and its one gate, and points at `openspec/config.yaml` for the artifact rules
- * rather than repeating them: two copies of the rules would drift apart.
+ * skills, so this is where they learn the flow. The section is a pointer, not
+ * prose: many `AGENTS.md` files are routers with a line cap (core-api's is 40).
+ * It states the order, points at `openspec/config.yaml` for the artifact rules
+ * rather than repeating them (two copies would drift apart), and links the
+ * flow's own page from its heading for the rest.
+ *
+ * Merge on request is the flow's one gate, but not the repository's only one:
+ * a repository that also gates apply, commit or archive keeps those gates, so
+ * the section defers to its approval rules instead of calling merge the only
+ * gate.
  *
  * The section sits between two HTML comments, so a later run can find it and
  * replace it after a plugin upgrade without touching the rest of the file. A
@@ -16,22 +23,11 @@ export const BEGIN = '<!-- openspec-steward:begin -->';
 export const END = '<!-- openspec-steward:end -->';
 
 export const AGENTS_SECTION = `${BEGIN}
-## OpenSpec change flow
+## [OpenSpec change flow](https://github.com/codecicada/openspec-steward/blob/master/docs/change-flow.md)
 
-Changes to this repository go through the openspec-steward flow. From
-\`/start-change\` until \`/stop-change\`, this order binds:
-
-\`\`\`
-explore -> propose -> apply -> open PR -> verified green -> archive
-  -> verify the apply -> merge on explicit request
-\`\`\`
-
-- \`/start-change <description>\` opens or resumes a change;
-  \`/stop-change <name>\` closes or suspends it. Without Claude Code, follow the
-  same order by hand.
-- Archive comes before merge, never after.
-- Merge is the only gate: it happens only when a human asks for it.
-- Write every artifact to the rules in \`openspec/config.yaml\`.
+From \`/start-change\` to \`/stop-change\`: explore -> propose -> apply -> open PR
+-> verified green -> archive -> verify the apply -> merge when a human asks.
+Artifacts follow \`openspec/config.yaml\`; this repository's own approval rules also bind.
 ${END}`;
 
 /**
