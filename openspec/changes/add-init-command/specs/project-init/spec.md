@@ -66,7 +66,8 @@ exists and differs from the steward block, and SHALL print the expected block.
 
 Init SHALL keep one marked steward section in the root `AGENTS.md`, summarising
 the binding order, `/start-change` and `/stop-change`, and merge as the only
-gate. The section SHALL NOT repeat the rules.
+gate. The section SHALL NOT repeat the rules. A begin marker with no end
+marker after it SHALL refuse, exit 1 and write nothing.
 
 #### Scenario: No AGENTS.md
 
@@ -86,6 +87,13 @@ gate. The section SHALL NOT repeat the rules.
 - **GIVEN** an `AGENTS.md` whose marked section differs from the current one
 - **WHEN** init runs
 - **THEN** only the text between the markers is replaced
+
+#### Scenario: AGENTS.md with an unclosed section
+
+- **GIVEN** an `AGENTS.md` with the steward begin marker and no end marker
+- **WHEN** init runs
+- **THEN** it exits 1 and its message names `AGENTS.md`
+- **AND** neither `config.yaml` nor `AGENTS.md` changes
 
 ### Requirement: Init is idempotent
 
