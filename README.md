@@ -235,11 +235,20 @@ reason that stopped being true months ago. That class needs a reader.
 npm test            # 79 unit tests, no dependencies, no fixtures on disk
 npm run test:bin    # packs, installs and drives the bins the way a consumer gets them
 npm run test:gates  # watches each /start-change and /stop-change refusal refuse
+npm run test:plugin # Claude Code's own validator over the manifests, skills and commands
 ```
 
-All three run in CI (`.github/workflows/ci.yml`) on every pull request and every
+All four run in CI (`.github/workflows/ci.yml`) on every pull request and every
 push to `master` — the unit tests across Node 20, 22 and 24, the smoke test on
-22, the gate refusals on git alone.
+22, the gate refusals on git alone, and the plugin validation on 22.
+
+`test:plugin` installs a pinned `@anthropic-ai/claude-code` and runs
+`claude plugin validate --strict .` with an empty `HOME` and no
+`ANTHROPIC_API_KEY`, so it needs no credentials. It also validates three broken
+copies of the tree — invalid `plugin.json`, a skill without frontmatter,
+unparseable command frontmatter — and expects each to fail; dropping `--strict`
+reddens the second. It does not check that the marketplace `source` exists or
+that the marketplace entry's name matches `plugin.json`.
 
 The two are not redundant. Every unit test imports a module under `lib/`
 directly and never reaches the entry point, so when the bin silently exited 0

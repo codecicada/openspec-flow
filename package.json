@@ -21,7 +21,8 @@
   "scripts": {
     "test": "sh scripts/check-specs/run-tests.sh",
     "test:bin": "sh scripts/check-specs/smoke-bin.sh",
-    "test:gates": "sh scripts/gates/refusal-cases.sh"
+    "test:gates": "sh scripts/gates/refusal-cases.sh",
+    "test:plugin": "sh scripts/plugin/validate.sh"
   },
   "engines": {
     "node": ">=20.11"
