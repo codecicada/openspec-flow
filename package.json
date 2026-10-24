@@ -1,6 +1,6 @@
 {
   "name": "openspec-steward",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Drift checks for OpenSpec repositories: a MODIFIED delta cannot silently discard a scenario, and a capability that claims to enumerate code is held to it.",
   "type": "module",
   "bin": {
