@@ -42,6 +42,7 @@ flowchart LR
       C1["/verify-green"]
       C2["/archive-on-green"]
       C3["/stop-change"]
+      C4["/init"]
     end
     subgraph checker["Checker: the enforcement"]
       K["openspec-check-specs"]
@@ -90,9 +91,12 @@ commands/start-change.md            open the flow, or resume a suspended change
 commands/verify-green.md            is this PR green against its head?
 commands/archive-on-green.md        pin, confirm, archive, verify
 commands/stop-change.md             stop it: close, suspend, or abandon and destroy
+commands/init.md                    set a consumer up: rules and AGENTS.md section
 scripts/check-specs/index.mjs       CLI entry point: all disk I/O, one subprocess
 scripts/check-specs/lib/*.mjs       pure checks over text, unit-tested
-scripts/check-specs/smoke-bin.sh    the bin, packed and installed as a consumer gets it
+scripts/check-specs/smoke-bin.sh    the bins, packed and installed as a consumer gets them
+scripts/init/index.mjs              init entry point: all disk I/O
+scripts/init/lib/*.mjs              what init writes, decided over text, unit-tested
 scripts/gates/refusal-cases.sh      each gate refusal, observed refusing
 .github/workflows/ci.yml            unit tests on Node 20/22/24, smoke test on 22, gate refusals
 ```

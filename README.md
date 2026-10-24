@@ -29,6 +29,7 @@ built — with diagrams — are in [`docs/`](docs/README.md).
 | `/start-change <description>` | describe the work; it proposes a session title and a change slug, then opens the flow (or resumes one a stop suspended): does this deserve a change, is the tree clean, is the base current, is the slug free |
 | `/archive-on-green` | pin the head SHA, confirm each check by name, archive, verify the apply |
 | `/verify-green` | is this PR actually green, against its current head? |
+| `/init` | set the repository up: the steward artifact rules in `openspec/config.yaml`, a flow summary in `AGENTS.md` |
 | `/stop-change` | stop the flow: closed if the change reached its end, suspended with a recorded resume point if it did not; `--abandon` destroys it, code and all, after pinning the commits to a verified remote tag |
 
 `/start-change` and `/stop-change` bracket the flow, and the brackets nest in
@@ -89,6 +90,19 @@ repository is trusted. For one machine only, without touching the repository:
 claude plugin marketplace add codecicada/openspec-steward
 claude plugin install openspec-steward@openspec-steward
 ```
+
+Then set the consumer repository up for the flow. In Claude Code, run
+`/openspec-steward:init`. Without Claude Code:
+
+```bash
+node <plugin>/scripts/init/index.mjs --root .
+```
+
+It adds the steward artifact rules to `openspec/config.yaml`, and a marked flow
+summary to `AGENTS.md` for agents that read that file rather than this plugin's
+skills. It refuses, writing nothing, when `openspec/config.yaml` is missing (run
+`openspec init` first) or already carries `rules:` of its own; which rules win
+is yours to merge. A second run changes nothing.
 
 Then wire the checker into the consumer repository:
 
@@ -218,8 +232,8 @@ reason that stopped being true months ago. That class needs a reader.
 ## Developing this package
 
 ```bash
-npm test            # 57 unit tests, no dependencies, no fixtures on disk
-npm run test:bin    # packs, installs and drives the bin the way a consumer gets it
+npm test            # 79 unit tests, no dependencies, no fixtures on disk
+npm run test:bin    # packs, installs and drives the bins the way a consumer gets them
 npm run test:gates  # watches each /start-change and /stop-change refusal refuse
 ```
 
@@ -232,11 +246,12 @@ directly and never reaches the entry point, so when the bin silently exited 0
 through its npm symlink all 37 stayed green: `process.argv[1]` is the symlink
 while `import.meta.url` is the real file, and the entry guard compared them
 directly. `scripts/check-specs/smoke-bin.sh` covers that seam by installing the
-packed tarball into a throwaway project and making five observations — the bin
+packed tarball into a throwaway project and making six observations — the bin
 prints its usage, a missing `openspec` CLI fails loudly rather than passing, a
 seeded dropped scenario is caught *and named*, restoring it goes green again,
-and a legacy `openspec-flow.json` passes with its deprecation note on stderr
-only.
+a legacy `openspec-flow.json` passes with its deprecation note on stderr
+only, and `openspec-steward-init`, which carries the same entry guard, writes
+its rules through its own symlink.
 
 Watched failing before being trusted, per the `openspec-evidence` skill:
 reintroducing that entry guard leaves `npm test` at 37 passed while the smoke
