@@ -282,4 +282,4 @@ base, and whether an agent obeys a refusal it can see.
 
 ## Licence
 
-MIT
+MIT — see [`LICENSE`](LICENSE).
