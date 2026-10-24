@@ -2,12 +2,12 @@
 
 ## 1. Licence
 
-- [ ] 1.1 Add `LICENSE` with the standard MIT text, `Copyright (c) 2026 Yannick Lescure`; verify `npm pack --dry-run` lists `LICENSE`. Accept: `LICENSE` appears in the tarball contents.
-- [ ] 1.2 Point the `## Licence` section of `README.md` at `LICENSE`; verify by reading the section. Accept: it names MIT and links `LICENSE`.
+- [x] 1.1 Add `LICENSE` with the standard MIT text, `Copyright (c) 2026 Yannick Lescure`; verify `npm pack --dry-run` lists `LICENSE`. Accept: `LICENSE` appears in the tarball contents.
+- [x] 1.2 Point the `## Licence` section of `README.md` at `LICENSE`; verify by reading the section. Accept: it names MIT and links `LICENSE`.
 
 ## 2. Integration
 
-- [ ] 2.1 Run `npm test`, `npm run test:bin`, `npm run test:gates` and `node scripts/check-specs/index.mjs --root .`; verify all exit 0. Accept: four green runs.
+- [x] 2.1 Run `npm test`, `npm run test:bin`, `npm run test:gates` and `node scripts/check-specs/index.mjs --root .`; verify all exit 0. Accept: four green runs.
 
 ## Workflow follow-up
 
