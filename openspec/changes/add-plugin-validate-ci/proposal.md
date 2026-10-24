@@ -1,7 +1,7 @@
 # Proposal
 
-- A CI job runs `claude plugin validate .` with a pinned Claude Code CLI.
-- It also watches the validator fail on two broken copies.
+- A CI job runs `claude plugin validate --strict .` with a pinned Claude Code CLI.
+- It also watches the validator fail on three broken copies.
 - It needs no credentials; the script runs the same way locally.
 
 ## Why
@@ -12,15 +12,15 @@ CI and fails only when a consumer installs the plugin.
 ## What Changes
 
 - `scripts/plugin/validate.sh` (`npm run test:plugin`): the real tree passes;
-  a copy with invalid `plugin.json`, and one with unparseable skill
-  frontmatter, each fail.
+  copies with invalid `plugin.json`, a skill without frontmatter, and
+  unparseable command frontmatter each fail.
 - `ci.yml`: a `plugin validate` job running it.
 - README, `docs/README.md`: list the fourth suite.
 
 ## Non-goals
 
-- Checking command frontmatter or marketplace/plugin name agreement, which the
-  validator does not check.
+- Checking the marketplace `source` path or marketplace/plugin name agreement,
+  which the validator does not check.
 - Adding the job to the required checks (a manual ruleset edit).
 
 ## Capabilities

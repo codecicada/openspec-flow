@@ -98,7 +98,8 @@ scripts/check-specs/smoke-bin.sh    the bins, packed and installed as a consumer
 scripts/init/index.mjs              init entry point: all disk I/O
 scripts/init/lib/*.mjs              what init writes, decided over text, unit-tested
 scripts/gates/refusal-cases.sh      each gate refusal, observed refusing
-.github/workflows/ci.yml            unit tests on Node 20/22/24, smoke test on 22, gate refusals
+scripts/plugin/validate.sh          claude plugin validate --strict, and three broken copies failing it
+.github/workflows/ci.yml            unit tests on Node 20/22/24, smoke test on 22, gate refusals, plugin validate
 ```
 
 Installation and the `openspec-steward.json` format are in the

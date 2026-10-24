@@ -1,8 +1,9 @@
 # CI for openspec-steward.
 #
 # This repository is a Claude Code plugin and an npm package at once. CI can
-# only exercise the package half: loading the plugin needs
-# ${CLAUDE_PLUGIN_ROOT}, which does not exist on a runner.
+# exercise the package half in full, but not load the plugin: that needs
+# ${CLAUDE_PLUGIN_ROOT}, which does not exist on a runner. What it can do for
+# the plugin half is validate it statically (the `plugin` job).
 #
 # Until this workflow existed, the package had no test runner of its own. The
 # only thing that ran its tests was a repository installing it, whose own test
@@ -116,3 +117,36 @@ jobs:
       - uses: actions/checkout@v7
 
       - run: sh scripts/gates/refusal-cases.sh
+
+  plugin:
+    name: plugin validate
+    runs-on: ubuntu-26.04
+
+    # No other job reads the plugin manifests or the skill and command
+    # frontmatter, so a broken one passed CI and failed only when a consumer
+    # installed the plugin. This runs Claude Code's own validator over them,
+    # `--strict`, from a pinned CLI.
+    #
+    # It needs no credentials: the script runs the validator with an empty HOME
+    # and no ANTHROPIC_API_KEY, here and locally alike, so that claim is
+    # observed on every run rather than inherited from the runner.
+    #
+    # Watched failing before being trusted: the script also validates three
+    # broken copies of the tree (invalid plugin.json, a skill without
+    # frontmatter, unparseable command frontmatter) and expects each to fail.
+    # Dropping `--strict` reddens exactly the frontmatter-less skill.
+    #
+    # Not covered, even under --strict: a marketplace `source` pointing at a
+    # directory that does not exist, and a marketplace entry whose name differs
+    # from plugin.json.
+    #
+    # Installs @anthropic-ai/claude-code from the registry, so this job needs
+    # network beyond the checkout. 22 matches the other single-version jobs.
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - run: sh scripts/plugin/validate.sh
