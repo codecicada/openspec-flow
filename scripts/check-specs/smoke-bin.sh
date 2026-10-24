@@ -1,7 +1,7 @@
 #!/bin/sh
-# Smoke-tests the published `openspec-check-specs` bin the way a consumer gets
-# it: packed, installed into a fresh project, and invoked through the symlink
-# npm puts in `node_modules/.bin`.
+# Smoke-tests the published bins, `openspec-check-specs` above all, the way a
+# consumer gets them: packed, installed into a fresh project, and invoked
+# through the symlink npm puts in `node_modules/.bin`.
 #
 # Why this exists, and why the unit tests do not cover it: until commit
 # e1567a4 the bin's entry guard compared `process.argv[1]` with
@@ -16,13 +16,14 @@
 # an installed copy makes observations A and C below both report exit 0 with no
 # output, which is what this script now refuses to accept.
 #
-# The five observations, in the order they run:
+# The six observations, in the order they run:
 #
 #   A  --help exits 0 AND prints its usage      the bin's main() ran at all
 #   B  no openspec CLI  -> exit 1 naming strict  a tool that never ran is not a pass
 #   C  seeded fault     -> exit 1 naming it      the checker has teeth
 #   D  fault repaired   -> exit 0                and does not fire on everything
 #   E  legacy config    -> exit 0, note on stderr  a deprecation is not a finding
+#   F  init on fresh config -> exit 0, rules: written  the init bin runs through its symlink too
 #
 # C and D are the same fixture, one scenario apart. A guard that fires on
 # everything is as useless as one that fires on nothing, so both directions of
@@ -271,6 +272,37 @@ else
   observe fail "a legacy config should exit 0 with the note on stderr only; got status $STATUS, stdout: $OUT, stderr: $ERR"
 fi
 rm -f "$WORK/consumer/openspec-flow.json"
+
+# --- F: the init bin writes the rules through its own symlink ----------------
+#
+# `openspec-steward-init` has the same entry guard as the checker, so it can
+# fail the same way: load, never run main(), exit 0. The exit code is therefore
+# not enough; the rules block has to be in the file afterwards. The fixture is
+# what `openspec init` writes: `rules:` only inside a comment.
+
+INIT_BIN="$WORK/consumer/node_modules/.bin/openspec-steward-init"
+mkdir -p "$WORK/fresh/openspec"
+cat >"$WORK/fresh/openspec/config.yaml" <<'YAML'
+schema: spec-driven
+
+# Per-artifact rules (optional)
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+YAML
+
+set +e
+OUT=$("$INIT_BIN" --root "$WORK/fresh" 2>&1)
+STATUS=$?
+set -e
+if [ -L "$INIT_BIN" ] && [ "$STATUS" -eq 0 ] &&
+  grep -q '^rules:' "$WORK/fresh/openspec/config.yaml" &&
+  grep -q 'openspec-steward:begin' "$WORK/fresh/AGENTS.md"; then
+  observe ok 'the init bin writes the rules and the AGENTS.md section through its symlink'
+else
+  observe fail "init on a fresh config should exit 0 and write rules: and AGENTS.md; got status $STATUS and output: $OUT"
+fi
 
 printf '\n'
 if [ "$FAILURES" -ne 0 ]; then

@@ -1,5 +1,6 @@
 #!/bin/sh
-# Runs the specification checkers' unit tests.
+# Runs the unit tests of every script under scripts/: the specification
+# checkers and init.
 #
 # A script rather than a bare `node --test check-specs/` in
 # package.json, for the same reason `scripts/check-docs/run-tests.sh` is one:
@@ -13,7 +14,7 @@
 # on this host while the same tests pass when listed individually.
 set -eu
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 # shellcheck disable=SC2046 # word splitting is the point: one argument per file
 set -- $(find . -name '*.test.mjs' | sort)
@@ -22,7 +23,7 @@ set -- $(find . -name '*.test.mjs' | sort)
 # working directory, which would run something and report success — the
 # rubber-stamp failure mode the checkers themselves guard against.
 if [ "$#" -eq 0 ]; then
-  echo "run-tests.sh: no *.test.mjs found under scripts/check-specs" >&2
+  echo "run-tests.sh: no *.test.mjs found under scripts" >&2
   echo "the tests were moved or deleted; fix this script rather than ignoring it" >&2
   exit 1
 fi
