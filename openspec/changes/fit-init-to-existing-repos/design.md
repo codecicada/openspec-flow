@@ -22,7 +22,8 @@ section's "Merge is the only gate" contradicts. See proposal.md for why.
    keys at one indentation as `key:`, items deeper as `- item`, blank and `#`
    lines skipped. An item is compared after trimming and dropping one pair of
    matching outer quotes. Anything else (flow style, nested maps, continuation
-   lines, a second key indentation) makes the block unreadable: `null`.
+   lines, a second key indentation, a key twice, which YAML would collapse)
+   makes the block unreadable: `null`.
 2. **`missingRules(block)`** returns the steward items absent from the block,
    grouped by key, or `null` when unreadable. Order and extra keys or items do
    not matter.

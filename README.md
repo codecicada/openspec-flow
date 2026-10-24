@@ -100,9 +100,22 @@ node <plugin>/scripts/init/index.mjs --root .
 
 It adds the steward artifact rules to `openspec/config.yaml`, and a marked flow
 summary to `AGENTS.md` for agents that read that file rather than this plugin's
-skills. It refuses, writing nothing, when `openspec/config.yaml` is missing (run
-`openspec init` first) or already carries `rules:` of its own; which rules win
-is yours to merge. A second run changes nothing.
+skills. A second run changes nothing.
+
+A `rules:` block that is already there is never rewritten. If it holds every
+steward rule, rules of your own beside them included, it counts as set up.
+Otherwise init refuses, writing nothing, and prints only the steward items it
+lacks: add them under their keys, next to your own, and run init again. It also
+refuses when `openspec/config.yaml` is missing (run `openspec init` first), or
+when the block is not block style (`key:` lines, each once, with `- item` lists)
+and so cannot be read.
+
+The `AGENTS.md` section is seven lines, plus one blank line before it: the
+order, where the rules live, and a link to [the flow](docs/change-flow.md),
+short enough for an `AGENTS.md` that is a router with a line cap. It names merge
+on request as the flow's gate, not the repository's only one: where your own
+rules also require approval to apply, commit or archive, those still bind, and
+the section says so.
 
 Then wire the checker into the consumer repository:
 
